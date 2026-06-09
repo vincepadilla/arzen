@@ -54,6 +54,6 @@ CRITICAL RULE: You must ONLY answer questions related to civil engineering, stru
 
   } catch (error) {
     console.error('Gemini API Error:', error);
-    return res.status(500).json({ error: 'Failed to communicate with the AI model' });
+    return res.status(500).json({ error: error.message || 'Failed to communicate with the AI model' });
   }
 }
