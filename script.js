@@ -197,3 +197,88 @@ window.addEventListener('load', () => {
     });
   }
 });
+
+/* Chatbot Logic */
+document.addEventListener('DOMContentLoaded', () => {
+  const chatToggleBtn = document.getElementById('chatToggleBtn');
+  const chatCloseBtn = document.getElementById('chatCloseBtn');
+  const chatClearBtn = document.getElementById('chatClearBtn');
+  const chatWindow = document.getElementById('chatWindow');
+  const chatInput = document.getElementById('chatInput');
+  const chatSendBtn = document.getElementById('chatSendBtn');
+  const chatMessages = document.getElementById('chatMessages');
+
+  if (!chatToggleBtn) return;
+
+  chatToggleBtn.addEventListener('click', () => {
+    chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  chatCloseBtn.addEventListener('click', () => {
+    chatWindow.style.display = 'none';
+  });
+
+  if (chatClearBtn) {
+    chatClearBtn.addEventListener('click', () => {
+      chatMessages.innerHTML = '<div class="chat-message bot-message">Hello! I am Arzen\'s virtual assistant. Ask me anything about his civil engineering background and experience!</div>';
+    });
+  }
+
+  const appendMessage = (text, sender) => {
+    const msgDiv = document.createElement('div');
+    msgDiv.classList.add('chat-message');
+    msgDiv.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
+    msgDiv.textContent = text;
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  };
+
+  const sendMessage = async () => {
+    const text = chatInput.value.trim();
+    if (!text) return;
+
+    appendMessage(text, 'user');
+    chatInput.value = '';
+    
+    // Typing indicator
+    const typingId = 'typing-' + Date.now();
+    const typingDiv = document.createElement('div');
+    typingDiv.classList.add('chat-message', 'bot-message');
+    typingDiv.id = typingId;
+    typingDiv.textContent = 'Typing...';
+    chatMessages.appendChild(typingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      
+      const data = await response.json();
+      
+      const typingEl = document.getElementById(typingId);
+      if (typingEl) typingEl.remove();
+
+      if (response.ok) {
+        appendMessage(data.reply, 'bot');
+      } else {
+        appendMessage("Error: " + (data.error || "Could not get response."), 'bot');
+      }
+    } catch (error) {
+      console.error(error);
+      const typingEl = document.getElementById(typingId);
+      if (typingEl) typingEl.remove();
+      appendMessage("Error: Could not connect to the server.", 'bot');
+    }
+  };
+
+  chatSendBtn.addEventListener('click', sendMessage);
+  chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      sendMessage();
+    }
+  });
+});
+

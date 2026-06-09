@@ -32,7 +32,7 @@
       <div class="hero-tag">Licensed Civil Engineer</div>
 
       <h1 class="hero-name">
-        Arzen Louse P.<br>
+        Arzen Louisse<br>
         <em>Navor</em>
       </h1>
 
@@ -249,6 +249,31 @@
         <div class="slider-dots" id="sliderDots"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Chatbot UI -->
+  <div class="chat-widget">
+    <div class="chat-window" id="chatWindow" style="display: none;">
+      <div class="chat-header">
+        <h4>Arzen's AI Assistant</h4>
+        <button id="chatCloseBtn">&times;</button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-message bot-message">Hello! I am Arzen's virtual assistant. Ask me anything about his civil
+          engineering background and experience!</div>
+      </div>
+      <div class="chat-input-area">
+        <button id="chatClearBtn" title="Clear Chat"
+          style="background: transparent; color: var(--mist); border: 1px solid var(--line); font-size: 1.1rem;">&#128465;</button>
+        <input type="text" id="chatInput" placeholder="Ask a question..." />
+        <button id="chatSendBtn">&#9654;</button>
+      </div>
+    </div>
+    <button class="chat-toggle-btn" id="chatToggleBtn">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+    </button>
   </div>
 
   <script src="script.js"></script>
