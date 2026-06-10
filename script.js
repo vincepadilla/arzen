@@ -198,6 +198,76 @@ window.addEventListener('load', () => {
   }
 });
 
+/* Blogs Data & Logic */
+const blogsData = {
+  "blog1": {
+    title: "The Future of Sustainable Concrete",
+    author: "Arzen Navor",
+    date: "Oct 15, 2025",
+    content: "<p>The construction industry is constantly evolving, and one of the most critical areas of research is finding sustainable alternatives to traditional concrete.</p><p>As structural engineers, we are responsible for specifying materials that not only meet the required strength and durability parameters but also minimize environmental impact. We've seen significant progress in geopolymer concrete and the use of supplementary cementitious materials (SCMs) like fly ash, slag, and silica fume.</p><p>Moving forward, the integration of carbon-capture technologies within the concrete mixing process holds incredible promise for creating carbon-negative structural elements.</p>"
+  },
+  "blog2": {
+    title: "Understanding Seismic Dampers",
+    author: "Arzen Navor",
+    date: "Sep 02, 2025",
+    content: "<p>Seismic events pose a massive threat to civil structures, especially in earthquake-prone regions like the Pacific Ring of Fire. While traditional ductile design allows the building to absorb energy through controlled damage (yielding), modern approaches use seismic dampers to dissipate energy without damaging the main structural components.</p><p>Viscous dampers, which act essentially like shock absorbers for buildings, have proven extremely effective in reducing floor accelerations and inter-story drifts. When modeling these in software like ETABS, nonlinear time history analysis is crucial to accurately capture their velocity-dependent behavior.</p>"
+  },
+  "blog3": {
+    title: "BIM Coordination Challenges",
+    author: "Arzen Navor",
+    date: "Aug 18, 2025",
+    content: "<p>Building Information Modeling (BIM) has revolutionized how we design and construct, but it comes with its own set of coordination challenges. One of the most common issues arises when integrating the structural model with Mechanical, Electrical, and Plumbing (MEP) models.</p><p>Clash detection in Navisworks often reveals pipes running straight through deep steel beams or concrete shear walls. The key to resolving these is early coordination meetings. By defining 'keep-out' zones and establishing clear rules for web penetrations in steel beams early in the schematic design phase, we can save countless hours of rework and prevent costly delays on site.</p>"
+  },
+  "blog4": {
+    title: "Advances in Bridge Aerodynamics",
+    author: "Arzen Navor",
+    date: "Jul 10, 2025",
+    content: "<p>Long-span bridges, such as suspension and cable-stayed bridges, are highly susceptible to wind-induced vibrations. Understanding bridge aerodynamics is no longer just about testing physical models in wind tunnels; it's heavily reliant on Computational Fluid Dynamics (CFD).</p><p>By simulating turbulent wind flows around complex deck cross-sections, engineers can optimize the aerodynamic shape of the deck to mitigate flutter and vortex-induced vibrations. This combination of digital simulation and physical testing ensures these monumental structures remain stable even in extreme weather conditions.</p>"
+  },
+  "blog5": {
+    title: "Geotechnical Site Investigation Best Practices",
+    author: "Arzen Navor",
+    date: "Jun 22, 2025",
+    content: "<p>A superstructure is only as good as the foundation it rests upon. Yet, geotechnical site investigations are often underfunded or rushed. Comprehensive soil testing, including standard penetration tests (SPT), cone penetration tests (CPT), and lab analysis, is vital.</p><p>Skipping these steps can lead to unforeseen differential settlement, expansive soil issues, or even bearing capacity failure. Investing in a thorough geotechnical report provides the data necessary to design optimized, safe, and cost-effective foundation systems.</p>"
+  }
+};
+
+const blogModal = document.getElementById('blogModal');
+const blogModalClose = document.getElementById('blogModalClose');
+const blogModalTitle = document.getElementById('blogModalTitle');
+const blogModalMeta = document.getElementById('blogModalMeta');
+const blogModalBody = document.getElementById('blogModalBody');
+
+function openBlogModal(blogId) {
+  const blog = blogsData[blogId];
+  if (!blog) return;
+  blogModalTitle.textContent = blog.title;
+  blogModalMeta.innerHTML = `<span class="blog-author">${blog.author}</span> &bull; <span class="blog-date">${blog.date}</span>`;
+  blogModalBody.innerHTML = blog.content;
+  blogModal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeBlogModal() {
+  blogModal.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+document.querySelectorAll('.blog-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const blogId = card.getAttribute('data-blog-id');
+    openBlogModal(blogId);
+  });
+});
+
+if (blogModalClose) blogModalClose.addEventListener('click', closeBlogModal);
+
+if (blogModal) {
+  blogModal.addEventListener('click', (e) => {
+    if (e.target === blogModal) closeBlogModal();
+  });
+}
+
 /* Chatbot Logic */
 document.addEventListener('DOMContentLoaded', () => {
   const chatToggleBtn = document.getElementById('chatToggleBtn');

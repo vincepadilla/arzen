@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Blogs — Arzen Navor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">ARZN<span>.</span></div>
+    <ul class="nav-links">
+      <li><a href="index.html#hero">Home</a></li>
+      <li><a href="index.html#about">About</a></li>
+      <li><a href="index.html#projects">Projects</a></li>
+      <li><a href="blogs.html">Blogs</a></li>
+      <li><a href="index.html#contact">Contact</a></li>
+    </ul>
+  </nav>
+
+  <!-- ALL BLOGS HEADER -->
+  <section id="hero" style="min-height: 40vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding-top: 100px;">
+    <div class="hero-text reveal" style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; align-items: center;">
+      <h1 class="hero-name">
+        All <em>Articles</em>
+      </h1>
+      <p class="hero-title" style="margin-top: 1rem;">Thoughts on Engineering &amp; Design</p>
+    </div>
+  </section>
+
+  <div class="blueprint-divider"></div>
+
+  <!-- ALL BLOGS -->
+  <section id="blogs" style="padding-top: 4rem;">
+    <div class="blogs-grid" id="blogsGrid">
+    </div>
+  </section>
+
+  <div class="blueprint-divider" style="margin-top: 4rem;"></div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2026 Arzen Navor — All Rights Reserved</p>
+    <div class="social-links">
+      <a href="linkedin.com/in/arzenlouissenavor">LinkedIn</a>
+    </div>
+  </footer>
+
+  <!-- Blog Modal Popup -->
+  <div class="modal-overlay" id="blogModal">
+    <div class="modal-content blog-modal-content">
+      <button class="modal-close" id="blogModalClose">&times;</button>
+      <div class="blog-modal-header">
+        <h3 class="modal-title" id="blogModalTitle">Blog Title</h3>
+        <p class="blog-meta" id="blogModalMeta">Author &bull; Date</p>
+      </div>
+      <div class="blog-modal-body" id="blogModalBody">
+        Full content here...
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

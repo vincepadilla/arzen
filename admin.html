@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — Arzen Navor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
+  <style>
+    .admin-container {
+      padding: 100px 8vw 4rem;
+      min-height: 100vh;
+    }
+    
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+    
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 2rem;
+      background: var(--steel);
+    }
+    
+    .admin-table th, .admin-table td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+    
+    .admin-table th {
+      font-family: var(--font-m);
+      color: var(--amber);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    .action-btn {
+      background: var(--plate);
+      border: 1px solid var(--line);
+      color: var(--chalk);
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      margin-right: 0.5rem;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+      font-family: var(--font-m);
+    }
+    
+    .action-btn:hover {
+      background: var(--amber);
+      color: var(--base);
+      border-color: var(--amber);
+    }
+    
+    .action-btn.delete {
+      color: #ff6b6b;
+      border-color: #ff6b6b;
+    }
+    
+    .action-btn.delete:hover {
+      background: #ff4c4c;
+      color: white;
+      border-color: #ff4c4c;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      background: var(--plate);
+      border-left: 4px solid var(--amber);
+      color: var(--chalk);
+      padding: 1rem 1.5rem;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      transform: translateX(120%);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      font-family: var(--font-m);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toast.show {
+      transform: translateX(0);
+    }
+
+    .toast.error {
+      border-left-color: #ff4c4c;
+    }
+    
+    .toast.success {
+      border-left-color: #3a8a3a;
+    }
+
+    /* Login Card Styles */
+    .login-card {
+      max-width: 400px;
+      margin: 10vh auto;
+      background: var(--plate); /* Solid background so it doesn't overlap/blend */
+      padding: 2.5rem 2rem;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--line);
+    }
+
+    .login-card h2 {
+      text-align: center;
+      margin-bottom: 2rem;
+      color: var(--amber);
+      font-size: 2.2rem;
+      letter-spacing: 1px;
+    }
+
+    /* Simple Form Styles for Mock Admin */
+    .admin-form-group {
+      margin-bottom: 1rem;
+    }
+    
+    .admin-form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--mist);
+      font-family: var(--font-m);
+    }
+    
+    .admin-form-group input[type="text"],
+    .admin-form-group input[type="password"],
+    .admin-form-group textarea {
+      width: 100%;
+      padding: 0.8rem;
+      background: var(--base);
+      border: 1px solid var(--line);
+      color: var(--chalk);
+      font-family: var(--font-b);
+      border-radius: 4px;
+    }
+    
+    .admin-form-group input:focus,
+    .admin-form-group textarea:focus {
+      outline: none;
+      border-color: var(--amber);
+    }
+    
+    .admin-form-group textarea {
+      height: 150px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">ARZN<span>.</span> Admin</div>
+    <ul class="nav-links">
+      <li><a href="index.html">Back to Site</a></li>
+      <li><a href="#" id="logoutBtn">Logout</a></li>
+    </ul>
+  </nav>
+
+  <div class="admin-container">
+    <div id="loginSection" class="login-card" style="display: none;">
+      <h2>Admin Login</h2>
+      <div class="admin-form-group">
+        <label>Email</label>
+        <input type="text" id="loginEmail" placeholder="admin@example.com">
+      </div>
+      <div class="admin-form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <button id="loginSubmitBtn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Login</button>
+    </div>
+
+    <div id="dashboardSection" style="display: none;">
+      <div class="admin-header">
+        <h2>Blog Management</h2>
+        <button id="createNewBtn" class="btn btn-primary">+ Create New Blog</button>
+      </div>
+      
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="adminTableBody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Admin Modal -->
+    <div class="modal-overlay" id="adminModal">
+      <div class="modal-content" style="padding: 2rem;">
+        <button class="modal-close" id="adminModalClose">&times;</button>
+        <h3 id="adminModalTitle" style="margin-bottom: 1.5rem; color: var(--amber);">Create / Edit Blog</h3>
+        
+        <input type="hidden" id="blogId">
+        
+        <div class="admin-form-group">
+          <label>Title</label>
+          <input type="text" id="blogTitle">
+        </div>
+        
+        <div class="admin-form-group">
+          <label>Content (HTML allowed)</label>
+          <textarea id="blogContent"></textarea>
+        </div>
+        
+        <div class="admin-form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+          <input type="checkbox" id="blogPublished">
+          <label style="margin: 0;">Published (Visible to public)</label>
+        </div>
+        
+        <button id="saveBlogBtn" class="btn btn-primary" style="margin-top: 1rem;">Save Blog</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script type="module" src="/src/admin.js"></script>
+</body>
+
+</html>

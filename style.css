@@ -544,6 +544,78 @@ nav {
   border: 1px solid rgba(74, 158, 186, .2);
 }
 
+/* BLOGS */
+#blogs {
+  padding: 8rem 8vw;
+}
+
+.blogs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+.blog-card {
+  background: var(--steel);
+  border: 1px solid var(--line);
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+  transition: transform .3s, border-color .3s;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.blog-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--amber);
+}
+
+.blog-body {
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.blog-meta {
+  font-family: var(--font-m);
+  font-size: .7rem;
+  letter-spacing: .1em;
+  color: var(--mist);
+  margin-bottom: 1rem;
+}
+
+.blog-title {
+  font-family: var(--font-h);
+  font-size: 1.6rem;
+  letter-spacing: .05em;
+  color: var(--chalk);
+  margin-bottom: 1rem;
+}
+
+.blog-preview {
+  font-size: .95rem;
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--mist);
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+}
+
+.read-more {
+  font-family: var(--font-m);
+  font-size: .75rem;
+  color: var(--amber);
+  text-transform: uppercase;
+  letter-spacing: .15em;
+  align-self: flex-start;
+  transition: color .2s;
+}
+
+.blog-card:hover .read-more {
+  color: var(--chalk);
+}
+
 /* CONTACT */
 #contact {
   padding: 8rem 8vw;
@@ -743,7 +815,8 @@ footer p {
     padding-right: 1.2rem;
   }
 
-  .projects-grid {
+  .projects-grid,
+  .blogs-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -918,6 +991,38 @@ footer p {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+/* BLOG MODAL */
+.blog-modal-content {
+  max-width: 800px;
+  max-height: 85vh;
+}
+
+.blog-modal-header {
+  padding: 3rem 3rem 1.5rem 3rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink);
+}
+
+.blog-modal-body {
+  padding: 2rem 3rem 3rem 3rem;
+  overflow-y: auto;
+  font-weight: 300;
+  line-height: 1.8;
+  color: var(--chalk);
+  font-size: 1.05rem;
+}
+
+.blog-modal-body p {
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .blog-modal-header,
+  .blog-modal-body {
+    padding: 2rem;
   }
 }
 

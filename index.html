@@ -21,6 +21,7 @@
       <li><a href="#hero">Home</a></li>
       <li><a href="#about">About</a></li>
       <li><a href="#projects">Projects</a></li>
+      <li><a href="#blogs">Blogs</a></li>
       <li><a href="#contact">Contact</a></li>
     </ul>
   </nav>
@@ -193,10 +194,26 @@
 
   <div class="blueprint-divider"></div>
 
+  <!-- BLOGS -->
+  <section id="blogs">
+    <div class="section-header reveal">
+      <span class="section-num">03 //</span>
+      <h2 class="section-title">Blogs</h2>
+      <div class="section-line"></div>
+      <a href="blogs.html" class="btn btn-outline"
+        style="padding: 0.5rem 1.5rem; font-size: 0.7rem; margin-left: auto;">View More &#9654;</a>
+    </div>
+
+    <div class="blogs-grid" id="blogsGrid">
+    </div>
+  </section>
+
+  <div class="blueprint-divider"></div>
+
   <!-- CONTACT -->
   <section id="contact">
     <div class="section-header reveal">
-      <span class="section-num">03 //</span>
+      <span class="section-num">04 //</span>
       <h2 class="section-title">Contact</h2>
       <div class="section-line"></div>
     </div>
@@ -228,7 +245,7 @@
 
     <p>© 2026 Arzen Navor — All Rights Reserved</p>
     <div class="social-links">
-      <a href="linkedin.com/in/arzenlouissenavor">LinkedIn</a>
+      <a href="https://www.linkedin.com/in/arzenlouissenavor" target="_blank">LinkedIn</a>
     </div>
   </footer>
 
@@ -247,6 +264,20 @@
         <h3 class="modal-title" id="modalTitle">Project Title</h3>
         <p class="modal-desc" id="modalDesc">Project Description</p>
         <div class="slider-dots" id="sliderDots"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog Modal Popup -->
+  <div class="modal-overlay" id="blogModal">
+    <div class="modal-content blog-modal-content">
+      <button class="modal-close" id="blogModalClose">&times;</button>
+      <div class="blog-modal-header">
+        <h3 class="modal-title" id="blogModalTitle">Blog Title</h3>
+        <p class="blog-meta" id="blogModalMeta">Author &bull; Date</p>
+      </div>
+      <div class="blog-modal-body" id="blogModalBody">
+        Full content here...
       </div>
     </div>
   </div>
@@ -276,7 +307,7 @@
     </button>
   </div>
 
-  <script src="script.js?v=2"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 
 </html>
