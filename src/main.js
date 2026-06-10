@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // If it's the home page, only show latest 3 blogs. If blogs.html, show all.
     const containerId = 'blogsGrid';
     if (document.getElementById(containerId)) {
-      const blogsToRender = window.location.pathname.includes('blogs.html') ? publishedBlogs : publishedBlogs.slice(0, 3);
+      const blogsToRender = window.location.pathname.includes('blogs') ? publishedBlogs : publishedBlogs.slice(0, 3);
       renderBlogCards(blogsToRender, containerId);
     }
   }
