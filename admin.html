@@ -163,6 +163,50 @@
     .admin-form-group textarea {
       height: 150px;
     }
+
+    .admin-table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    /* Responsive Styles */
+    @media (max-width: 768px) {
+      .admin-container {
+        padding: 80px 5vw 2rem;
+      }
+      
+      .admin-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      .login-card {
+        margin: 5vh auto;
+        width: 90%;
+        padding: 1.5rem;
+      }
+
+      .toast-container {
+        left: 20px;
+        right: 20px;
+        bottom: 20px;
+      }
+
+      .toast {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .admin-table th, .admin-table td {
+        padding: 0.8rem 0.5rem;
+        font-size: 0.9rem;
+      }
+      
+      .action-btn {
+        margin-bottom: 0.5rem;
+      }
+    }
   </style>
 </head>
 
@@ -196,21 +240,22 @@
         <h2>Blog Management</h2>
         <button id="createNewBtn" class="btn btn-primary">+ Create New Blog</button>
       </div>
-      
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Title</th>
-            <th>Status</th>
-            <th>Date</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="adminTableBody">
-          <!-- Populated by JS -->
-        </tbody>
-      </table>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Admin Modal -->
