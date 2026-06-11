@@ -15,34 +15,35 @@
       padding: 100px 8vw 4rem;
       min-height: 100vh;
     }
-    
+
     .admin-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 2rem;
     }
-    
+
     .admin-table {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 2rem;
       background: var(--steel);
     }
-    
-    .admin-table th, .admin-table td {
+
+    .admin-table th,
+    .admin-table td {
       padding: 1rem;
       text-align: left;
       border-bottom: 1px solid var(--line);
     }
-    
+
     .admin-table th {
       font-family: var(--font-m);
       color: var(--amber);
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
-    
+
     .action-btn {
       background: var(--plate);
       border: 1px solid var(--line);
@@ -55,18 +56,18 @@
       transition: all 0.3s ease;
       font-family: var(--font-m);
     }
-    
+
     .action-btn:hover {
       background: var(--amber);
       color: var(--base);
       border-color: var(--amber);
     }
-    
+
     .action-btn.delete {
       color: #ff6b6b;
       border-color: #ff6b6b;
     }
-    
+
     .action-btn.delete:hover {
       background: #ff4c4c;
       color: white;
@@ -90,7 +91,7 @@
       color: var(--chalk);
       padding: 1rem 1.5rem;
       border-radius: 4px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
       transform: translateX(120%);
       transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       font-family: var(--font-m);
@@ -106,7 +107,7 @@
     .toast.error {
       border-left-color: #ff4c4c;
     }
-    
+
     .toast.success {
       border-left-color: #3a8a3a;
     }
@@ -115,7 +116,8 @@
     .login-card {
       max-width: 400px;
       margin: 10vh auto;
-      background: var(--plate); /* Solid background so it doesn't overlap/blend */
+      background: var(--plate);
+      /* Solid background so it doesn't overlap/blend */
       padding: 2.5rem 2rem;
       border-radius: 8px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
@@ -134,14 +136,14 @@
     .admin-form-group {
       margin-bottom: 1rem;
     }
-    
+
     .admin-form-group label {
       display: block;
       margin-bottom: 0.5rem;
       color: var(--mist);
       font-family: var(--font-m);
     }
-    
+
     .admin-form-group input[type="text"],
     .admin-form-group input[type="password"],
     .admin-form-group textarea {
@@ -153,13 +155,13 @@
       font-family: var(--font-b);
       border-radius: 4px;
     }
-    
+
     .admin-form-group input:focus,
     .admin-form-group textarea:focus {
       outline: none;
       border-color: var(--amber);
     }
-    
+
     .admin-form-group textarea {
       height: 150px;
     }
@@ -174,7 +176,7 @@
       .admin-container {
         padding: 80px 5vw 2rem;
       }
-      
+
       .admin-header {
         flex-direction: column;
         align-items: flex-start;
@@ -198,11 +200,12 @@
         box-sizing: border-box;
       }
 
-      .admin-table th, .admin-table td {
+      .admin-table th,
+      .admin-table td {
         padding: 0.8rem 0.5rem;
         font-size: 0.9rem;
       }
-      
+
       .action-btn {
         margin-bottom: 0.5rem;
       }
@@ -263,24 +266,24 @@
       <div class="modal-content" style="padding: 2rem;">
         <button class="modal-close" id="adminModalClose">&times;</button>
         <h3 id="adminModalTitle" style="margin-bottom: 1.5rem; color: var(--amber);">Create / Edit Blog</h3>
-        
+
         <input type="hidden" id="blogId">
-        
+
         <div class="admin-form-group">
           <label>Title</label>
           <input type="text" id="blogTitle">
         </div>
-        
+
         <div class="admin-form-group">
-          <label>Content (HTML allowed)</label>
+          <label>Content</label>
           <textarea id="blogContent"></textarea>
         </div>
-        
+
         <div class="admin-form-group" style="display: flex; align-items: center; gap: 0.5rem;">
           <input type="checkbox" id="blogPublished">
           <label style="margin: 0;">Published (Visible to public)</label>
         </div>
-        
+
         <button id="saveBlogBtn" class="btn btn-primary" style="margin-top: 1rem;">Save Blog</button>
       </div>
     </div>
