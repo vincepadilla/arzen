@@ -28,44 +28,44 @@ function handleSubmit(e) {
 const projectsData = {
   "project1": [
     {
-      image: "Projects/project1_related/perspective.png",
+      image: "/Projects/project1_related/perspective.png",
       title: "Perspective View",
       description: "Modeled in Sketchup and rendered using Enscape."
     },
     {
-      image: "Projects/project1_related/structural.png",
+      image: "/Projects/project1_related/structural.png",
       title: "Structural Analysis using ETABS Software",
       description: "The first version of the design was conducted using ETABS and then proceeded to design revisions and improvements using SAP2000 for optimization of the design."
     },
     {
-      image: "Projects/project1_related/column_and_shearwall.png",
+      image: "/Projects/project1_related/column_and_shearwall.png",
       title: "Column and Shear Wall Connection Detailing",
       description: "Structural detailing and scheduling for the column and shear wall connection for the elevator shaft"
     },
     {
-      image: "Projects/project1_related/ductile_column.png",
+      image: "/Projects/project1_related/ductile_column.png",
       title: "Ductile Column Detailing",
       description: "Column seismic detailing based on NSCP 2015"
     },
     {
-      image: "Projects/project1_related/ductile_beam_detailing.png",
+      image: "/Projects/project1_related/ductile_beam_detailing.png",
       title: "Ductile Beam Detailing",
       description: "Ductile detailing for beams in accordance with the NSCP 2015 provision"
     }
   ],
   "project2": [
     {
-      image: "Projects/project2_related/3Dview_workflow.png",
+      image: "/Projects/project2_related/3Dview_workflow.png",
       title: "3D View Workflow in Autodesk Revit",
       description: "Showcasing the complete workflow using Revit 2024"
     },
     {
-      image: "Projects/project2_related/floorplanworkflow.png",
+      image: "/Projects/project2_related/floorplanworkflow.png",
       title: "Floor Plan Workflow View in Autodesk Revit",
       description: "Floor plan workflow workaround in Revit 2024"
     },
     {
-      image: "Projects/project2_related/frontelevation.png",
+      image: "/Projects/project2_related/frontelevation.png",
       title: "Front Elevation Perspective Sample Output",
       description: "Sample output for perspective showcasing the Front Elevation of the project"
     }
@@ -73,24 +73,24 @@ const projectsData = {
   ],
   "project3": [
     {
-      image: "Projects/project3_related/structuralprovisions.png",
+      image: "/Projects/project3_related/structuralprovisions.png",
       title: "Structural Earthquake Provision NSCP 2015",
       description: "Earthquake parameters used in accordance with NSCP 2015 and UBC 1997"
     },
     {
-      image: "Projects/project3_related/linearstaticanalysis.png",
+      image: "/Projects/project3_related/linearstaticanalysis.png",
       title: "Linear Static Analysis using STAAD.Pro",
       description: "Modeled and analyze using STAAD.Pro for the linear static analysis."
     },
 
     {
-      image: "Projects/project3_related/modeshapes.png",
+      image: "/Projects/project3_related/modeshapes.png",
       title: "Different Mode Shapes",
       description: "Performed elastic modal analysis. Fundamental modes exhibit X and Y translation with expected period values, while Mode 3 shows torsional behavior indicating moderate eccentricity in mass/stiffness distribution."
     },
 
     {
-      image: "Projects/project3_related/capacityspectrum.png",
+      image: "/Projects/project3_related/capacityspectrum.png",
       title: "Capacity Spectrum Method Pushover Analysis",
       description: "Nonlinear static pushover analysis provided the global capacity curve. The model exhibits ductile post-yield behavior, confirming good redistribution capacity of the system."
     }
