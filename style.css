@@ -1180,3 +1180,36 @@ footer p {
     height: 60vh;
   }
 }
+
+/* LIGHT MODE THEME */
+:root.light-mode {
+  --ink: #f8fafc;
+  --steel: #ffffff;
+  --plate: #f1f5f9;
+  --grid: #e2e8f0;
+  --line: #cbd5e1;
+  --amber: #d97706; /* slightly darker amber for contrast on light mode */
+  --chalk: #0f172a;
+  --mist: #475569;
+  --accent: #0284c7;
+}
+
+/* Ensure background grid stands out a bit less in light mode */
+:root.light-mode body::before {
+  opacity: 0.6;
+}
+
+/* Theme toggle hover style */
+.theme-toggle:hover {
+  color: var(--amber) !important;
+  transform: scale(1.1);
+}
+
+/* Fix hardcoded backgrounds in light mode */
+:root.light-mode nav {
+  background: rgba(248, 250, 252, .92); /* Matches light mode --ink with opacity */
+}
+
+:root.light-mode #projects {
+  background: transparent; /* Make it same as other sections */
+}

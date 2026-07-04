@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LRFD Beam Design Computation — Arzen Navor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-to-pdfmake/browser.js"></script>
+  <link rel="stylesheet" href="lrfdstyle.css">
+</head>
+
+<body>
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">ARZN<span>.</span> Admin</div>
+    <ul class="nav-links">
+      <li><a href="/admin.html">Back to Admin</a></li>
+    </ul>
+  </nav>
+
+  <div class="computation-container">
+    <div class="computation-card">
+      <h2>LRFD Beam Design</h2>
+      <p class="subtitle">Calculate Flexure, Shear, and Torsion Requirements</p>
+
+      <!-- Beam Parameters -->
+      <div class="param-card">
+        <div class="section-title">Beam Parameters</div>
+        <div class="input-grid">
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Beam System Type</label>
+            <select id="beamType" style="width: 100%; padding: 0.8rem; background: var(--plate); border: 1px solid var(--line); color: var(--amber); font-family: var(--font-b); border-radius: 4px; outline:none; box-sizing: border-box;">
+              <option value="gravity">Gravity Beam (Ordinary Moment Frame)</option>
+              <option value="smrf">Special Moment Resisting Frame (SMRF)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Concrete f'<sub>c</sub> (MPa)</label>
+            <input type="number" id="fc" placeholder="e.g. 28" value="28">
+          </div>
+          <div class="form-group">
+            <label>Concrete Weight</label>
+            <select id="concreteWeight" style="width: 100%; padding: 0.8rem; background: var(--plate); border: 1px solid var(--line); color: var(--mist); font-family: var(--font-m); border-radius: 4px; outline:none; box-sizing: border-box;">
+              <option value="1.0">Normal Weight (&lambda; = 1.0)</option>
+              <option value="0.85">Sand-Lightweight (&lambda; = 0.85)</option>
+              <option value="0.75">All-Lightweight (&lambda; = 0.75)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Max Aggregate Size (mm)</label>
+            <input type="number" id="maxAgg" placeholder="e.g. 20" value="20">
+          </div>
+          <div class="form-group">
+            <label>Concrete Cover (mm)</label>
+            <input type="number" id="cover" placeholder="e.g. 40" value="40">
+          </div>
+          <div class="form-group">
+            <label>Beam Width, b (mm)</label>
+            <input type="number" id="b" placeholder="e.g. 250" value="250">
+          </div>
+          <div class="form-group">
+            <label>Total Depth, h (mm)</label>
+            <input type="number" id="h" placeholder="e.g. 450" value="450">
+          </div>
+          <div class="form-group">
+            <label>Clear Span, L<sub>n</sub> (m)</label>
+            <input type="number" id="spanLn" placeholder="e.g. 5.0" value="5.0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Reinforcement Parameters -->
+      <div class="param-card">
+        <div class="section-title">Reinforcement Parameters</div>
+        <div class="subcard-grid">
+          <div class="subcard">
+            <h5>Main Flexural Bars</h5>
+            <div class="form-group">
+              <label>f<sub>y</sub> (MPa)</label>
+              <input type="number" id="fyMain" placeholder="e.g. 414" value="414">
+            </div>
+            <div class="form-group">
+              <label>Bar Size (mm)</label>
+              <input type="number" id="diaMain" placeholder="e.g. 20" value="20">
+            </div>
+          </div>
+          <div class="subcard">
+            <h5>Shear Bars (Stirrups)</h5>
+            <div class="form-group">
+              <label>f<sub>y</sub> (MPa)</label>
+              <input type="number" id="fyWeb" placeholder="e.g. 275" value="275">
+            </div>
+            <div class="form-group">
+              <label>Bar Size (mm)</label>
+              <input type="number" id="diaWeb" placeholder="e.g. 10" value="10">
+            </div>
+            <div class="form-group">
+              <label>Number of Legs</label>
+              <input type="number" id="nLegs" placeholder="e.g. 2" value="2">
+            </div>
+          </div>
+          <div class="subcard">
+            <h5>Torsion Longitudinal Bars</h5>
+            <div class="form-group">
+              <label>f<sub>y</sub> (MPa)</label>
+              <input type="number" id="fyTor" placeholder="e.g. 414" value="414">
+            </div>
+            <div class="form-group">
+              <label>Bar Size (mm)</label>
+              <input type="number" id="diaTor" placeholder="e.g. 16" value="16">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SMRF-Only Seismic Parameters (ACI 318-14 §18.6) -->
+      <div class="param-card smrf-only-card" id="smrfParamsCard" style="display:none;">
+        <div class="section-title">SMRF Seismic Parameters <span class="code-ref">(ACI 318-14 §18.6)</span></div>
+        <div class="input-grid">
+          <div class="form-group">
+            <label>Service Dead Load, w<sub>D</sub> (kN/m)</label>
+            <input type="number" id="wD" placeholder="e.g. 20" value="20" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Service Live Load, w<sub>L</sub> (kN/m)</label>
+            <input type="number" id="wL" placeholder="e.g. 10" value="10" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Service Shear Override, V<sub>g</sub> (kN)</label>
+            <input type="number" id="vg" placeholder="Optional" value="" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Column Width, b<sub>col</sub> (mm) <em style="font-size:0.7rem;">(optional §18.6.2.3)</em></label>
+            <input type="number" id="bCol" placeholder="e.g. 400" value="0">
+          </div>
+        </div>
+        <div class="smrf-note">
+          <strong>Probable Shear (§18.6.5.1):</strong> Design shear Ve = (Mpr,left + Mpr,right) / L<sub>n</sub> &plusmn; V<sub>g</sub>, where Mpr uses 1.25f<sub>y</sub> and &phi;=1.0. The gravity shear V<sub>g</sub> is calculated from the factored load w<sub>u</sub> = 1.2w<sub>D</sub> + 1.0w<sub>L</sub>, unless explicitly overridden above. Concrete shear V<sub>c</sub>&nbsp;= 0 per §18.6.5.2. The <strong>50% Rule</strong> (Mn<sup>+</sup> &ge; 0.5&middot;Mn<sup>&minus;</sup>) and <strong>25% Rule</strong> (As at any section &ge; 0.25&times;max joint As) are automatically enforced and bars are bumped up if needed.
+        </div>
+      </div>
+
+      <!-- Factored Loads -->
+      <div class="param-card">
+        <div class="section-title">Factored Loads (M<sub>u</sub>, V<sub>u</sub>, T<sub>u</sub>)</div>
+        <div class="moments-grid">
+          <!-- Left Support -->
+          <div class="moment-section">
+            <h4>1. Left Support <small>Fixed / Support Section</small></h4>
+            <div class="form-group">
+              <label>Top Moment (-M<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="leftMuTop" placeholder="e.g. 80" value="80">
+            </div>
+            <div class="form-group">
+              <label>Bottom Moment (+M<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="leftMuBot" placeholder="e.g. 0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Shear (V<sub>u</sub>) kN</label>
+              <input type="number" id="leftVu" placeholder="e.g. 120" value="120">
+            </div>
+            <div class="form-group">
+              <label>Torsion (T<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="leftTu" placeholder="e.g. 10" value="10">
+            </div>
+          </div>
+
+          <!-- Midspan -->
+          <div class="moment-section is-span">
+            <h4>2. Midspan <small>Continuous Span Section</small></h4>
+            <div class="form-group">
+              <label>Top Moment (-M<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="midMuTop" placeholder="e.g. 0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Bottom Moment (+M<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="midMuBot" placeholder="e.g. 60" value="60">
+            </div>
+            <div class="form-group">
+              <label>Shear (V<sub>u</sub>) kN</label>
+              <input type="number" id="midVu" placeholder="e.g. 20" value="20">
+            </div>
+            <div class="form-group">
+              <label>Torsion (T<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="midTu" placeholder="e.g. 0" value="0">
+            </div>
+          </div>
+
+          <!-- Right Support -->
+          <div class="moment-section">
+            <h4>3. Right Support <small>Fixed / Support Section</small></h4>
+            <div class="form-group">
+              <label>Top Moment (-M<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="rightMuTop" placeholder="e.g. 85" value="85">
+            </div>
+            <div class="form-group">
+              <label>Bottom Moment (+M<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="rightMuBot" placeholder="e.g. 0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Shear (V<sub>u</sub>) kN</label>
+              <input type="number" id="rightVu" placeholder="e.g. 125" value="125">
+            </div>
+            <div class="form-group">
+              <label>Torsion (T<sub>u</sub>) kN&middot;m</label>
+              <input type="number" id="rightTu" placeholder="e.g. 12" value="12">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button id="computeBtn" class="btn btn-primary">Calculate Detailed Reinforcement</button>
+        <button id="reopenResultsBtn" type="button">View Last Results</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Popup -->
+  <div id="resultsModal" class="modal-overlay">
+    <div class="modal-card">
+      <button id="modalCloseBtn" class="modal-close" type="button" aria-label="Close results">&times;</button>
+
+      <div id="resultBox" class="result-box">
+        <div id="pdfInputSummary" style="display: none;"></div>
+        <h3>Design Summary</h3>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th>Section</th>
+              <th>Top Main Bars</th>
+              <th>Bottom Main Bars</th>
+              <th>Shear Rebar (Stirrups)</th>
+              <th>Torsion Long. Bars</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Left Support</td>
+              <td id="resLeftTop">0</td>
+              <td id="resLeftBot">0</td>
+              <td id="resLeftWeb">0</td>
+              <td id="resLeftTor">0</td>
+            </tr>
+            <tr>
+              <td>Midspan</td>
+              <td id="resMidTop">0</td>
+              <td id="resMidBot">0</td>
+              <td id="resMidWeb">0</td>
+              <td id="resMidTor">0</td>
+            </tr>
+            <tr>
+              <td>Right Support</td>
+              <td id="resRightTop">0</td>
+              <td id="resRightBot">0</td>
+              <td id="resRightWeb">0</td>
+              <td id="resRightTor">0</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="detailed-calc" id="detailedCalcContent" style="display:none;">
+          <h3 style="text-align: center; color: var(--amber); margin-bottom: 1.5rem;">Detailed Calculations</h3>
+          <div id="calcLeft"></div>
+          <div id="calcMid"></div>
+          <div id="calcRight"></div>
+        </div>
+
+        <div id="diagramContainer" style="margin-top: 2rem; border-top: 1px dashed var(--line); padding-top: 2rem;"></div>
+
+        <button id="downloadPdfBtn" class="btn" type="button">Download Detailed Calculation (PDF)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes Popup -->
+  <div id="notesModal" class="modal-overlay" style="z-index: 2000; align-items: center; overflow: hidden;">
+    <div class="notes-card" style="max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 0;">
+      <button class="modal-close" type="button" onclick="document.getElementById('notesModal').classList.remove('active')" aria-label="Close notes">&times;</button>
+      <div id="notesModalContent" class="detailed-calc" style="padding: 1rem 2rem 2rem; overflow-y: auto; flex: 1; margin-top: 0; border-top: none;"></div>
+    </div>
+  </div>
+
+  <script src="lrfdscript.js"></script>
+</body>
+
+</html>

@@ -3,6 +3,7 @@ import { blogService } from './services/blogService.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const loginSection = document.getElementById('loginSection');
+  const selectionSection = document.getElementById('selectionSection');
   const dashboardSection = document.getElementById('dashboardSection');
   const adminTableBody = document.getElementById('adminTableBody');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -62,8 +63,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function showDashboard() {
     loginSection.style.display = 'none';
-    dashboardSection.style.display = 'block';
-    await loadBlogs();
+    if (selectionSection) selectionSection.style.display = 'block';
+    dashboardSection.style.display = 'none';
+  }
+
+  // --- Selection Actions ---
+  const blogModuleBtn = document.getElementById('blogModuleBtn');
+  if (blogModuleBtn) {
+    blogModuleBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (selectionSection) selectionSection.style.display = 'none';
+      dashboardSection.style.display = 'block';
+      await loadBlogs();
+    });
   }
 
   // --- Auth Actions ---

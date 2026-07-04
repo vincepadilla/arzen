@@ -1,0 +1,410 @@
+.computation-container {
+      padding: 100px 5vw 4rem;
+      min-height: 100vh;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .computation-card {
+      background: var(--plate);
+      padding: 2.5rem 2rem;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--line);
+    }
+
+    .computation-card h2 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+      color: var(--amber);
+      font-size: 2.2rem;
+      letter-spacing: 1px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: var(--mist);
+      margin-bottom: 2.25rem;
+    }
+
+    /* ---------- Section eyebrow ---------- */
+    .section-title {
+      font-family: var(--font-m);
+      color: var(--amber);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 0 0 1.1rem;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .section-title::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--line);
+    }
+
+    /* ---------- Parameter cards (Beam / Reinforcement) ---------- */
+    .param-card {
+      background: var(--base);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .input-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+    }
+
+    .subcard-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+
+    .subcard {
+      background: var(--steel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1rem 1.1rem 1.1rem;
+    }
+
+    .subcard h5 {
+      color: var(--mist);
+      font-family: var(--font-m);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 0 0 0.85rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .subcard .form-group {
+      margin-bottom: 0.75rem;
+    }
+
+    .subcard .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 800px) {
+      .input-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .subcard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 500px) {
+      .input-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ---------- Load cards (Left / Mid / Right) ---------- */
+    .moments-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 800px) {
+      .moments-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .moment-section {
+      background: var(--base);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--amber);
+      border-radius: 8px;
+      padding: 1.25rem 1.25rem 0.4rem;
+    }
+
+    .moment-section.is-span {
+      border-top-style: dashed;
+    }
+
+    .moment-section h4 {
+      color: var(--chalk);
+      margin: 0 0 1rem;
+      font-family: var(--font-m);
+      font-size: 1rem;
+      letter-spacing: 0.03em;
+    }
+
+    .moment-section h4 small {
+      display: block;
+      margin-top: 0.2rem;
+      color: var(--mist);
+      font-family: var(--font-b);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.4rem;
+      color: var(--mist);
+      font-family: var(--font-m);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group input[type="number"] {
+      width: 100%;
+      padding: 0.8rem;
+      background: var(--plate);
+      border: 1px solid var(--line);
+      color: var(--chalk);
+      font-family: var(--font-b);
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--amber);
+    }
+
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1.75rem;
+    }
+
+    #computeBtn {
+      flex: 1;
+      padding: 1rem;
+      font-size: 1.1rem;
+    }
+
+    #reopenResultsBtn {
+      display: none;
+      flex: 0 0 auto;
+      padding: 1rem 1.5rem;
+      background: transparent;
+      color: var(--amber);
+      border: 1px solid var(--amber);
+      border-radius: 4px;
+      font-family: var(--font-m);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.85rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #reopenResultsBtn:hover {
+      background: var(--amber);
+      color: var(--base);
+    }
+
+    /* ---------- Results popup / modal ---------- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      z-index: 1000;
+      padding: 4vh 1rem;
+      overflow-y: auto;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--plate);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      max-width: 980px;
+      width: 100%;
+      padding: 2.25rem 2rem 2rem;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.75);
+      position: relative;
+      margin-bottom: 4vh;
+    }
+
+    @keyframes fastPopIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.85) translateY(20px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .notes-card {
+      background: var(--plate);
+      border: 1px solid var(--amber);
+      border-radius: 12px;
+      max-width: 550px;
+      width: 100%;
+      padding: 2.25rem 2rem 2rem;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.75);
+      position: relative;
+      margin-bottom: 4vh;
+      animation: fastPopIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 1.1rem;
+      right: 1.1rem;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--steel);
+      border: 1px solid var(--line);
+      color: var(--chalk);
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    .result-box h3 {
+      color: var(--amber);
+      margin-bottom: 1rem;
+      padding-right: 2rem;
+    }
+
+    .result-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+      display: block;
+      overflow-x: auto;
+    }
+
+    .result-table th,
+    .result-table td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+
+    .result-table th {
+      color: var(--mist);
+      font-family: var(--font-m);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.85rem;
+    }
+
+    .result-table td {
+      color: var(--chalk);
+      font-family: var(--font-b);
+      font-size: 1.05rem;
+    }
+
+    .detailed-calc {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px dashed var(--line);
+    }
+
+    .calc-section {
+      background: var(--base);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .calc-section h4 {
+      color: var(--amber);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .calc-step {
+      font-family: var(--font-m);
+      color: var(--mist);
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .calc-step strong {
+      color: var(--chalk);
+    }
+
+    #downloadPdfBtn {
+      margin-top: 1.5rem;
+      background: var(--amber);
+      color: var(--base);
+      border: none;
+      width: 100%;
+      padding: 0.9rem;
+    }
+
+    #downloadPdfBtn:hover {
+      background: var(--chalk);
+    }
+
+    /* ---------- SMRF Seismic Parameters Card ---------- */
+    .smrf-only-card {
+      border-left: 3px solid var(--amber);
+      background: color-mix(in srgb, var(--base) 92%, #d97706 8%);
+    }
+
+    .smrf-note {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      background: var(--steel);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--amber);
+      border-radius: 4px;
+      font-family: var(--font-m);
+      font-size: 0.8rem;
+      color: var(--mist);
+      line-height: 1.6;
+    }
+
+    .smrf-note strong {
+      color: var(--chalk);
+    }
+
+    .code-ref {
+      font-family: var(--font-b);
+      font-size: 0.72rem;
+      color: var(--amber);
+      opacity: 0.8;
+      letter-spacing: 0.03em;
+    }
+
+    /* ---------- End of PDF Styles ---------- */

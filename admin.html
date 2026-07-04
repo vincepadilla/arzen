@@ -171,10 +171,56 @@
       overflow-x: auto;
     }
 
-    /* Responsive Styles */
+    /* Selection Card Styles */
+    .selection-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .selection-card {
+      background: var(--plate);
+      border: 1px solid var(--line);
+      padding: 3rem 2rem;
+      text-align: center;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      color: var(--chalk);
+      text-decoration: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .selection-card:hover {
+      border-color: var(--amber);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .selection-card h3 {
+      color: var(--amber);
+      margin-bottom: 1rem;
+      font-size: 1.8rem;
+      letter-spacing: 1px;
+    }
+
+    .selection-card p {
+      color: var(--mist);
+      font-family: var(--font-m);
+      font-size: 0.95rem;
+    }
+
     @media (max-width: 768px) {
       .admin-container {
         padding: 80px 5vw 2rem;
+      }
+
+      .selection-grid {
+        grid-template-columns: 1fr;
       }
 
       .admin-header {
@@ -236,6 +282,21 @@
         <input type="password" id="loginPassword" placeholder="••••••••">
       </div>
       <button id="loginSubmitBtn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Login</button>
+    </div>
+
+    <div id="selectionSection" style="display: none; max-width: 800px; margin: 0 auto;">
+      <h2 style="color: var(--amber); text-align: center; font-size: 2.2rem; margin-bottom: 1rem;">Admin Dashboard</h2>
+      <p style="text-align: center; color: var(--mist); font-family: var(--font-m);">Select a module to manage</p>
+      <div class="selection-grid">
+        <a href="/computation.html" class="selection-card">
+          <h3>Structural Computation</h3>
+          <p>Civil engineering computation tools</p>
+        </a>
+        <a href="#" id="blogModuleBtn" class="selection-card">
+          <h3>Blogs</h3>
+          <p>Manage and create blog posts</p>
+        </a>
+      </div>
     </div>
 
     <div id="dashboardSection" style="display: none;">
