@@ -30,13 +30,45 @@
       <h2>LRFD Beam Design</h2>
       <p class="subtitle">Calculate Flexure, Shear, and Torsion Requirements</p>
 
+      <!-- Project Information -->
+      <div class="param-card">
+        <div class="section-title">Project Information</div>
+        <div class="input-grid">
+          <div class="form-group">
+            <label>Project Name</label>
+            <input type="text" id="projName" value="">
+          </div>
+          <div class="form-group">
+            <label>Project No.</label>
+            <input type="text" id="projNo" value="">
+          </div>
+          <div class="form-group">
+            <label>Client / Owner</label>
+            <input type="text" id="projClient" value="">
+          </div>
+          <div class="form-group">
+            <label>Designed By</label>
+            <input type="text" id="projDesignedBy" value="">
+          </div>
+          <div class="form-group">
+            <label>Checked By</label>
+            <input type="text" id="projCheckedBy" value="">
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="projDate" value="">
+          </div>
+        </div>
+      </div>
+
       <!-- Beam Parameters -->
       <div class="param-card">
         <div class="section-title">Beam Parameters</div>
         <div class="input-grid">
           <div class="form-group" style="grid-column: span 2;">
             <label>Beam System Type</label>
-            <select id="beamType" style="width: 100%; padding: 0.8rem; background: var(--plate); border: 1px solid var(--line); color: var(--amber); font-family: var(--font-b); border-radius: 4px; outline:none; box-sizing: border-box;">
+            <select id="beamType"
+              style="width: 100%; padding: 0.8rem; background: var(--plate); border: 1px solid var(--line); color: var(--amber); font-family: var(--font-b); border-radius: 4px; outline:none; box-sizing: border-box;">
               <option value="gravity">Gravity Beam (Ordinary Moment Frame)</option>
               <option value="smrf">Special Moment Resisting Frame (SMRF)</option>
             </select>
@@ -47,10 +79,11 @@
           </div>
           <div class="form-group">
             <label>Concrete Weight</label>
-            <select id="concreteWeight" style="width: 100%; padding: 0.8rem; background: var(--plate); border: 1px solid var(--line); color: var(--mist); font-family: var(--font-m); border-radius: 4px; outline:none; box-sizing: border-box;">
-              <option value="1.0">Normal Weight (&lambda; = 1.0)</option>
-              <option value="0.85">Sand-Lightweight (&lambda; = 0.85)</option>
-              <option value="0.75">All-Lightweight (&lambda; = 0.75)</option>
+            <select id="concreteWeight"
+              style="width: 100%; padding: 0.8rem; background: var(--plate); border: 1px solid var(--line); color: var(--mist); font-family: var(--font-m); border-radius: 4px; outline:none; box-sizing: border-box;">
+              <option value="1.0">&lambda; - 1.0 (Normal Weight)</option>
+              <option value="0.85">&lambda; - 0.85 (Sand-Lightweight)</option>
+              <option value="0.75">&lambda; - 0.75 (All-Lightweight)</option>
             </select>
           </div>
           <div class="form-group">
@@ -73,6 +106,51 @@
             <label>Clear Span, L<sub>n</sub> (m)</label>
             <input type="number" id="spanLn" placeholder="e.g. 5.0" value="5.0">
           </div>
+        </div>
+      </div>
+
+      <!-- Serviceability Parameters (ACI 318-14 §24 / NSCP 2015 §406) -->
+      <div class="param-card">
+        <div class="section-title">Serviceability Parameters <span class="code-ref">(ACI 318-14 §24 / NSCP 2015
+            §406)</span></div>
+        <div class="input-grid">
+          <div class="form-group">
+            <label>Service Dead Load, w<sub>D</sub> (kN/m)</label>
+            <input type="number" id="svc_wD" placeholder="e.g. 20" value="20" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Service Live Load, w<sub>L</sub> (kN/m)</label>
+            <input type="number" id="svc_wL" placeholder="e.g. 10" value="10" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Sustained Load Ratio, &beta; <em style="font-size:0.7rem;">(fraction of LL)</em></label>
+            <input type="number" id="svc_sus" placeholder="e.g. 0.3" value="0.3" step="0.05" min="0" max="1">
+          </div>
+          <div class="form-group">
+            <label>Support Condition</label>
+            <select id="svc_support"
+              style="width:100%;padding:0.8rem;background:var(--plate);border:1px solid var(--line);color:var(--mist);font-family:var(--font-m);border-radius:4px;outline:none;box-sizing:border-box;">
+              <option value="both">Both Ends Continuous</option>
+              <option value="one">One End Continuous</option>
+              <option value="ss">Simply Supported</option>
+              <option value="cant">Cantilever</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Non-Structural Elements Supported</label>
+            <select id="svc_sensitive"
+              style="width:100%;padding:0.8rem;background:var(--plate);border:1px solid var(--line);color:var(--mist);font-family:var(--font-m);border-radius:4px;outline:none;box-sizing:border-box;">
+              <option value="sensitive">Yes &mdash; sensitive to deflection (limit: L/480)</option>
+              <option value="not_sensitive">Yes &mdash; not sensitive to deflection (limit: L/240)</option>
+              <option value="none">No non-structural elements (limit: L/360)</option>
+            </select>
+          </div>
+        </div>
+        <div class="smrf-note" style="margin-top:0.75rem;">
+          <strong>Note:</strong> For SMRF beams the wD/wL fields above are synced with the SMRF Seismic Parameters.
+          Immediate live-load deflection is checked against L/360. Total post-construction deflection (&Delta;LT +
+          &Delta;LL) is checked against the selected non-structural element limit. Crack width is checked per ACI
+          §24.3.2 using f<sub>s</sub> = 2/3&middot;f<sub>y</sub>.
         </div>
       </div>
 
@@ -142,7 +220,12 @@
           </div>
         </div>
         <div class="smrf-note">
-          <strong>Probable Shear (§18.6.5.1):</strong> Design shear Ve = (Mpr,left + Mpr,right) / L<sub>n</sub> &plusmn; V<sub>g</sub>, where Mpr uses 1.25f<sub>y</sub> and &phi;=1.0. The gravity shear V<sub>g</sub> is calculated from the factored load w<sub>u</sub> = 1.2w<sub>D</sub> + 1.0w<sub>L</sub>, unless explicitly overridden above. Concrete shear V<sub>c</sub>&nbsp;= 0 per §18.6.5.2. The <strong>50% Rule</strong> (Mn<sup>+</sup> &ge; 0.5&middot;Mn<sup>&minus;</sup>) and <strong>25% Rule</strong> (As at any section &ge; 0.25&times;max joint As) are automatically enforced and bars are bumped up if needed.
+          <strong>Probable Shear (§18.6.5.1):</strong> Design shear Ve = (Mpr,left + Mpr,right) / L<sub>n</sub> &plusmn;
+          V<sub>g</sub>, where Mpr uses 1.25f<sub>y</sub> and &phi;=1.0. The gravity shear V<sub>g</sub> is calculated
+          from the factored load w<sub>u</sub> = 1.2w<sub>D</sub> + 1.0w<sub>L</sub>, unless explicitly overridden
+          above. Concrete shear V<sub>c</sub>&nbsp;= 0 per §18.6.5.2. The <strong>50% Rule</strong> (Mn<sup>+</sup> &ge;
+          0.5&middot;Mn<sup>&minus;</sup>) and <strong>25% Rule</strong> (As at any section &ge; 0.25&times;max joint
+          As) are automatically enforced and bars are bumped up if needed.
         </div>
       </div>
 
@@ -265,6 +348,24 @@
           </tbody>
         </table>
 
+        <!-- Serviceability Results -->
+        <div id="svcResults" style="margin-top:1.5rem; display:none;">
+          <h3 style="text-align:center; color:var(--amber); margin-bottom:1rem;">Serviceability Check (ACI 318-14 §24)
+          </h3>
+          <table class="result-table">
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>Computed</th>
+                <th>Allowable</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="svcTableBody"></tbody>
+          </table>
+          <div id="svcDetails" style="margin-top:1rem;"></div>
+        </div>
+
         <div class="detailed-calc" id="detailedCalcContent" style="display:none;">
           <h3 style="text-align: center; color: var(--amber); margin-bottom: 1.5rem;">Detailed Calculations</h3>
           <div id="calcLeft"></div>
@@ -272,7 +373,8 @@
           <div id="calcRight"></div>
         </div>
 
-        <div id="diagramContainer" style="margin-top: 2rem; border-top: 1px dashed var(--line); padding-top: 2rem;"></div>
+        <div id="diagramContainer" style="margin-top: 2rem; border-top: 1px dashed var(--line); padding-top: 2rem;">
+        </div>
 
         <button id="downloadPdfBtn" class="btn" type="button">Download Detailed Calculation (PDF)</button>
       </div>
@@ -281,9 +383,13 @@
 
   <!-- Notes Popup -->
   <div id="notesModal" class="modal-overlay" style="z-index: 2000; align-items: center; overflow: hidden;">
-    <div class="notes-card" style="max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 0;">
-      <button class="modal-close" type="button" onclick="document.getElementById('notesModal').classList.remove('active')" aria-label="Close notes">&times;</button>
-      <div id="notesModalContent" class="detailed-calc" style="padding: 1rem 2rem 2rem; overflow-y: auto; flex: 1; margin-top: 0; border-top: none;"></div>
+    <div class="notes-card"
+      style="max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 0;">
+      <button class="modal-close" type="button"
+        onclick="document.getElementById('notesModal').classList.remove('active')"
+        aria-label="Close notes">&times;</button>
+      <div id="notesModalContent" class="detailed-calc"
+        style="padding: 1rem 2rem 2rem; overflow-y: auto; flex: 1; margin-top: 0; border-top: none;"></div>
     </div>
   </div>
 

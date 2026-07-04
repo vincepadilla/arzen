@@ -1,394 +1,19 @@
-function getRebarArea(dia) {
-  return Math.PI * Math.pow(dia, 2) / 4;
-}
-
 /**
- * ACI 318-14 §18.6.5 — Probable Moment Strength
- * Uses 1.25fy (probable yield) and φ = 1.0
+ * lrfdscript.js -- UI, SVG, PDF, and event-handling layer.
+ *
+ * All engineering computation (flexure, shear, torsion, SMRF) has been
+ * migrated to the Python serverless backend at /api/compute_lrfd.
+ * The computeBtn click handler below POSTs the form inputs to that
+ * endpoint and receives { leftRes, midRes, rightRes } in return.
  */
-function computeMpr(As_mm2, fy, fc, b, d) {
-  if (As_mm2 <= 0 || d <= 0) return 0;
-  const fy_pr = 1.25 * fy;
-  const a = (As_mm2 * fy_pr) / (0.85 * fc * b);
-  return As_mm2 * fy_pr * (d - a / 2) / 1e6; // kN·m, φ = 1.0
-}
 
-function calculateFlexureLayers(Mu_kNm, b, h, cover, fc, fyMain, diaMain, diaWeb, beamType, maxAgg) {
-  if (Mu_kNm <= 0) return { As: 0, nBars: 0, layers: [], d: h - cover - diaWeb - diaMain / 2, txt: "0", doubly: false, rho: 0, details: "" };
 
-  const phiFlex = 0.90;
-  const Mu = Mu_kNm * 1e6;
-  const mainBarArea = getRebarArea(diaMain);
-  const minClearSpacing = Math.max(25, diaMain, (4/3) * maxAgg);
-  const b_clear = b - 2 * (cover + diaWeb);
-
-  let numLayers = 1;
-  let d = h - cover - diaWeb - diaMain / 2;
-  let As = 0, nBars = 0;
-  let rho = 0, As_req = 0, As_min = 0;
-  let details = "";
-
-  details += `<p class="calc-step">&nbsp;&nbsp;Initial assumption: 1 layer, d = ${d.toFixed(1)} mm</p>`;
-
-  while (numLayers <= 5) {
-    const Rn = Mu / (phiFlex * b * Math.pow(d, 2));
-    const inner = 1 - (2 * Rn) / (0.85 * fc);
-    if (inner < 0) {
-      details += `<p class="calc-step" style="color:#e74c3c;">&nbsp;&nbsp;<strong>Requires Doubly Reinforced Design</strong> (Rn too high for ${numLayers} layers, d=${d.toFixed(1)})</p>`;
-      return { As: 0, nBars: 0, layers: [], d, txt: "Doubly Reinf.", doubly: true, rho: 0, details };
-    }
-
-    rho = (0.85 * fc / fyMain) * (1 - Math.sqrt(inner));
-    const As_min1 = (Math.sqrt(fc) / (4 * fyMain)) * b * d;
-    const As_min2 = (1.4 / fyMain) * b * d;
-    As_min = Math.max(As_min1, As_min2);
-    As_req = rho * b * d;
-    As = Math.max(As_req, As_min);
-    nBars = Math.ceil(As / mainBarArea);
-
-    let maxBarsPerLayer = Math.floor((b_clear + minClearSpacing) / (diaMain + minClearSpacing));
-    if (maxBarsPerLayer < 2) maxBarsPerLayer = 2; // practical minimum 2 bars for stirrup corners
-
-    let requiredLayers = Math.ceil(nBars / maxBarsPerLayer);
-    if (requiredLayers <= numLayers) {
-      break; // It fits in the assumed number of layers!
-    }
-
-    // Need more layers, recalculate d
-    numLayers = requiredLayers;
-    const centroidDist = cover + diaWeb + diaMain / 2 + ((numLayers - 1) / 2) * 25; // 25mm vertical clear spacing
-    d = h - centroidDist;
-    details += `<p class="calc-step" style="color:#f39c12;">&nbsp;&nbsp;Rebars exceed width. Iterating to ${numLayers} layers, new d = ${d.toFixed(1)} mm</p>`;
-  }
-
-  let maxBarsPerLayer = Math.floor((b_clear + minClearSpacing) / (diaMain + minClearSpacing));
-  if (maxBarsPerLayer < 2) maxBarsPerLayer = 2;
-  let layers = [];
-  let remaining = nBars;
-  for (let i = 0; i < numLayers; i++) {
-    if (remaining > maxBarsPerLayer) {
-      layers.push(maxBarsPerLayer);
-      remaining -= maxBarsPerLayer;
-    } else {
-      layers.push(remaining);
-      remaining = 0;
-      break;
-    }
-  }
-
-  if (beamType === 'smrf' && rho > 0.025) {
-    details += `<p class="calc-step" style="color:#e74c3c;">&nbsp;&nbsp;<strong>SMRF FAILED:</strong> &rho; = ${rho.toFixed(4)} > 0.025 (NSCP 418.6.3.1).</p>`;
-  }
-
-  details += `<p class="calc-step">&nbsp;&nbsp;&rho; = ${rho.toFixed(5)} &rarr; As_req = ${As_req.toFixed(1)} mm&sup2;</p>`;
-  details += `<p class="calc-step">&nbsp;&nbsp;As_min = ${As_min.toFixed(1)} mm&sup2;</p>`;
-  details += `<p class="calc-step">&nbsp;&nbsp;<strong>Provided:</strong> ${As.toFixed(1)} mm&sup2; <strong>(${nBars} - &empty;${diaMain})</strong></p>`;
-  if (numLayers > 1) {
-    details += `<p class="calc-step">&nbsp;&nbsp;<em>Layer detailing: [${layers.join(', ')}] (bottom/top to inner)</em></p>`;
-  }
-
-  const a_actual = (As * fyMain) / (0.85 * fc * b);
-  const phiMn = phiFlex * As * fyMain * (d - a_actual / 2) / 1e6;
-
-  const txt = `${nBars}xD${diaMain}`;
-  return { As, nBars, layers, d, txt, doubly: false, rho, details, phiMn };
-}
-
-function computeSection(secName, beamType, MuTop_kNm, MuBot_kNm, Vu_kN, Tu_kNm, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda = 1.0, maxAgg = 20, smrfData = null) {
-  const phiFlex  = 0.90;
-  const phiShear = 0.75;
-
-  const mainBarArea = getRebarArea(diaMain);
-  const webBarArea  = getRebarArea(diaWeb);
-  const torBarArea  = getRebarArea(diaTor);
-  const Av = nLegs * webBarArea;
-
-  let detailsHTML = `<div class="calc-section"><h4>${secName} Section</h4>`;
-
-  // ── §18.6.2 Geometry Checks ─────────────────────────────────────────────
-  if (beamType === 'smrf') {
-    if (b < 250)
-      detailsHTML += `<p class="calc-step" style="color:#e74c3c;"><strong>SMRF §18.6.2.1 FAIL:</strong> b = ${b} mm &lt; 250 mm</p>`;
-    if (b < 0.3 * h)
-      detailsHTML += `<p class="calc-step" style="color:#e74c3c;"><strong>SMRF §18.6.2.1 FAIL:</strong> b = ${b} mm &lt; 0.3h = ${(0.3*h).toFixed(0)} mm</p>`;
-    if (smrfData && smrfData.bCol > 0) {
-      const bMax = smrfData.bCol + 3 * h;
-      const ok18623 = b <= bMax;
-      detailsHTML += `<p class="calc-step" style="color:${ok18623 ? '#16a34a' : '#e74c3c'};"><strong>SMRF §18.6.2.3:</strong> b = ${b} mm ${ok18623 ? '&le;' : '&gt;'} (bCol + 3h) = ${bMax.toFixed(0)} mm. ${ok18623 ? '✓' : 'FAIL'}</p>`;
-    }
-    detailsHTML += `<p class="calc-step"><strong>§18.6.3.1:</strong> Min 2 continuous bars top &amp; bottom throughout span.</p>`;
-  }
-
-  // ── FLEXURE — Top ───────────────────────────────────────────────────────
-  let txtTop = '0';
-  let topLayers = [];
-  let dTop = h - cover - diaWeb - diaMain / 2;
-  let phiMnTop = 0;
-  let AsTop = 0;
-
-  if (MuTop_kNm > 0) {
-    detailsHTML += `<p class="calc-step"><strong>Top Flexure (&minus;Mu):</strong> ${MuTop_kNm} kN&middot;m</p>`;
-    const tc = calculateFlexureLayers(MuTop_kNm, b, h, cover, fc, fyMain, diaMain, diaWeb, beamType, maxAgg);
-    detailsHTML += tc.details;
-    txtTop = tc.txt; topLayers = tc.layers; dTop = tc.d; phiMnTop = tc.phiMn; AsTop = tc.As;
-  } else {
-    AsTop = 2 * mainBarArea;
-    topLayers = [2];
-    const a_act = (AsTop * fyMain) / (0.85 * fc * b);
-    phiMnTop = phiFlex * AsTop * fyMain * (dTop - a_act / 2) / 1e6;
-    txtTop = beamType === 'smrf' ? `2xD${diaMain}` : '0';
-    if (beamType === 'smrf')
-      detailsHTML += `<p class="calc-step">Top: No moment demand &rarr; Min 2 hanger bars (§18.6.3.1).</p>`;
-  }
-
-  // ── FLEXURE — Bottom ────────────────────────────────────────────────────
-  let txtBot = '0';
-  let botLayers = [];
-  let dBot = h - cover - diaWeb - diaMain / 2;
-  let phiMnBot = 0;
-  let AsBot = 0;
-
-  if (MuBot_kNm > 0) {
-    detailsHTML += `<p class="calc-step"><strong>Bottom Flexure (+Mu):</strong> ${MuBot_kNm} kN&middot;m</p>`;
-    const bc = calculateFlexureLayers(MuBot_kNm, b, h, cover, fc, fyMain, diaMain, diaWeb, beamType, maxAgg);
-    detailsHTML += bc.details;
-    txtBot = bc.txt; botLayers = bc.layers; dBot = bc.d; phiMnBot = bc.phiMn; AsBot = bc.As;
-  } else {
-    AsBot = 2 * mainBarArea;
-    botLayers = [2];
-    const a_act = (AsBot * fyMain) / (0.85 * fc * b);
-    phiMnBot = phiFlex * AsBot * fyMain * (dBot - a_act / 2) / 1e6;
-    txtBot = beamType === 'smrf' ? `2xD${diaMain}` : '0';
-    if (beamType === 'smrf')
-      detailsHTML += `<p class="calc-step">Bottom: No moment demand &rarr; Min 2 hanger bars (§18.6.3.1).</p>`;
-  }
-
-  // ── §18.6.3 SMRF Flexural Proportion Checks ─────────────────────────────
-  if (beamType === 'smrf') {
-
-    // §18.6.3.2 — 25% Rule: As ≥ 0.25 × max joint As at any section
-    if (smrfData && smrfData.minAny > 0) {
-      const minAny = smrfData.minAny;
-      detailsHTML += `<p class="calc-step"><strong>§18.6.3.2 (25% Rule):</strong> As at any section &ge; ${minAny.toFixed(0)} mm&sup2; (0.25 &times; max joint As = ${smrfData.maxJointAs.toFixed(0)} mm&sup2;)</p>`;
-
-      if (AsTop < minAny - 0.5) {
-        const nReq = Math.ceil(minAny / mainBarArea);
-        AsTop = nReq * mainBarArea; topLayers = [nReq]; txtTop = `${nReq}xD${diaMain}`;
-        const a = (AsTop * fyMain) / (0.85 * fc * b);
-        phiMnTop = phiFlex * AsTop * fyMain * (dTop - a / 2) / 1e6;
-        detailsHTML += `<p class="calc-step" style="color:#f39c12;">&nbsp;&nbsp;Top bars bumped &rarr; ${nReq}&times;D${diaMain} (As = ${AsTop.toFixed(0)} mm&sup2;) ✓</p>`;
-      } else {
-        detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Top: As = ${AsTop.toFixed(0)} mm&sup2; &ge; ${minAny.toFixed(0)} mm&sup2; ✓</p>`;
-      }
-
-      if (AsBot < minAny - 0.5) {
-        const nReq = Math.ceil(minAny / mainBarArea);
-        AsBot = nReq * mainBarArea; botLayers = [nReq]; txtBot = `${nReq}xD${diaMain}`;
-        const a = (AsBot * fyMain) / (0.85 * fc * b);
-        phiMnBot = phiFlex * AsBot * fyMain * (dBot - a / 2) / 1e6;
-        detailsHTML += `<p class="calc-step" style="color:#f39c12;">&nbsp;&nbsp;Bottom bars bumped &rarr; ${nReq}&times;D${diaMain} (As = ${AsBot.toFixed(0)} mm&sup2;) ✓</p>`;
-      } else {
-        detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Bottom: As = ${AsBot.toFixed(0)} mm&sup2; &ge; ${minAny.toFixed(0)} mm&sup2; ✓</p>`;
-      }
-    }
-
-    // §18.6.3.2 — 50% Rule: Mn+ ≥ 0.5·Mn− at joint faces (support sections)
-    if (secName.includes('Support')) {
-      const reqMnPos = 0.5 * phiMnTop;
-      if (phiMnBot < reqMnPos - 0.1) {
-        const nReq = Math.ceil(0.5 * AsTop / mainBarArea);
-        AsBot = nReq * mainBarArea; botLayers = [nReq]; txtBot = `${nReq}xD${diaMain}`;
-        const a = (AsBot * fyMain) / (0.85 * fc * b);
-        phiMnBot = phiFlex * AsBot * fyMain * (dBot - a / 2) / 1e6;
-        detailsHTML += `<p class="calc-step" style="color:#f39c12;"><strong>§18.6.3.2 (50% Rule):</strong> &phi;Mn&sup2; bumped &rarr; ${nReq}&times;D${diaMain} so &phi;Mn&sup2; = ${phiMnBot.toFixed(1)} kN&middot;m &ge; 0.5&times;&phi;Mn&minus; = ${reqMnPos.toFixed(1)} kN&middot;m ✓</p>`;
-      } else {
-        detailsHTML += `<p class="calc-step"><strong>§18.6.3.2 (50% Rule):</strong> &phi;Mn&sup2; = ${phiMnBot.toFixed(1)} kN&middot;m &ge; 0.5&times;&phi;Mn&minus; = ${reqMnPos.toFixed(1)} kN&middot;m ✓</p>`;
-      }
-      // §18.6.4.3: First hoop note
-      detailsHTML += `<p class="calc-step"><strong>§18.6.4.3:</strong> First hoop &le; 50 mm from column face. Confinement zone = 2h = ${(2*h).toFixed(0)} mm.</p>`;
-    }
-
-    // Local Mpr for this section
-    const MprT = computeMpr(AsTop, fyMain, fc, b, dTop);
-    const MprB = computeMpr(AsBot, fyMain, fc, b, dBot);
-    detailsHTML += `<p class="calc-step"><strong>Mpr (§18.6.5, this section):</strong> Top = ${MprT.toFixed(1)} kN&middot;m, Bot = ${MprB.toFixed(1)} kN&middot;m</p>`;
-  }
-
-  const d = Math.min(dTop, dBot);
-
-  // ── SHEAR & TORSION ─────────────────────────────────────────────────────
-  let txtWeb = 'Not Req.';
-  let txtTor = 'Not Req.';
-
-  const Vc_concrete = 0.17 * lambda * Math.sqrt(fc) * b * d;
-  let Vc_design     = Vc_concrete; // will be set to 0 for SMRF
-  let designVu_kN   = Vu_kN;
-
-  if (beamType === 'smrf' && smrfData) {
-    // §18.6.5.1 — Probable Shear from sway mechanism
-    designVu_kN = smrfData.ve_kN;
-    Vc_design   = 0; // §18.6.5.2: Vc = 0
-
-    detailsHTML += `<p class="calc-step"><strong>SMRF Probable Shear (ACI 318-14 §18.6.5.1):</strong></p>`;
-    if (smrfData.vg > 0) {
-      detailsHTML += `<p class="calc-step">&nbsp;&nbsp;V<sub>g</sub> = ${smrfData.vg.toFixed(1)} kN (user override)</p>`;
-    } else {
-      detailsHTML += `<p class="calc-step">&nbsp;&nbsp;w<sub>u</sub> = 1.2(${smrfData.wD.toFixed(1)}) + 1.0(${smrfData.wL.toFixed(1)}) = ${smrfData.wu.toFixed(1)} kN/m</p>`;
-    }
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Mpr,LT = ${smrfData.Mpr_LT.toFixed(1)} kN&middot;m &nbsp; Mpr,LB = ${smrfData.Mpr_LB.toFixed(1)} kN&middot;m</p>`;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Mpr,RT = ${smrfData.Mpr_RT.toFixed(1)} kN&middot;m &nbsp; Mpr,RB = ${smrfData.Mpr_RB.toFixed(1)} kN&middot;m</p>`;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Sway L&rarr;R: Ve = ${smrfData.Ve_case1.toFixed(1)} kN &nbsp;&nbsp; Sway R&rarr;L: Ve = ${smrfData.Ve_case2.toFixed(1)} kN</p>`;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;<strong>Design Ve = ${smrfData.ve_kN.toFixed(1)} kN</strong> (governs over user Vu = ${Vu_kN.toFixed(1)} kN)</p>`;
-    detailsHTML += `<p class="calc-step" style="color:#f39c12;">&nbsp;&nbsp;<strong>§18.6.5.2: Vc = 0</strong> (seismic shear &ge; 50% Ve assumed; Pu &le; Agf'c/20 for beams)</p>`;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;(Vc,calc = ${(phiShear * Vc_concrete / 1000).toFixed(1)} kN &mdash; neglected per §18.6.5.2)</p>`;
-  } else {
-    detailsHTML += `<p class="calc-step"><strong>Shear &amp; Torsion:</strong> Vu = ${Vu_kN} kN, Tu = ${Tu_kNm} kN&middot;m</p>`;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;&phi;Vc = ${(phiShear * Vc_concrete / 1000).toFixed(2)} kN</p>`;
-  }
-
-  const designVu_N = designVu_kN * 1000;
-  const Tu_Nmm    = Tu_kNm * 1e6;
-
-  // Torsion threshold
-  const Acp = b * h;
-  const pcp = 2 * (b + h);
-  const Tth = 0.083 * lambda * Math.sqrt(fc) * Math.pow(Acp, 2) / pcp;
-  detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Tth = ${(Tth / 1e6).toFixed(2)} kN&middot;m &rarr; &phi;Tth = ${(phiShear * Tth / 1e6).toFixed(2)} kN&middot;m</p>`;
-
-  let At_s = 0;
-  let hasTorsion = false;
-  let ph = 0;
-  if (Tu_Nmm > phiShear * Tth) {
-    hasTorsion = true;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Tu &gt; &phi;Tth, Torsion must be considered.</p>`;
-    const x1 = b - 2 * cover - diaWeb;
-    const y1 = h - 2 * cover - diaWeb;
-    ph = 2 * (x1 + y1);
-    const Aoh = x1 * y1;
-    const Ao  = 0.85 * Aoh;
-    const Tn  = Tu_Nmm / phiShear;
-    At_s = Tn / (2 * Ao * fyWeb);
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Req. At/s = ${At_s.toFixed(3)} mm&sup2;/mm (per leg)</p>`;
-
-    let Al_req  = At_s * ph * (fyWeb / fyTor);
-    let At_s_min = Math.max(At_s, (0.175 * b) / fyWeb);
-    let Al_min   = (0.42 * Math.sqrt(fc) * Acp / fyTor) - (At_s_min * ph * (fyWeb / fyTor));
-    let Al = Math.max(Al_req, Al_min);
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Req. Al = ${Al_req.toFixed(1)} mm&sup2;, Al_min = ${Al_min.toFixed(1)} mm&sup2;</p>`;
-
-    const nTorBars_local = Math.ceil(Al / torBarArea);
-    txtTor = `${nTorBars_local}xD${diaTor}`;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;<strong>Provided Al:</strong> ${Al.toFixed(1)} mm&sup2; <strong>(${nTorBars_local} &minus; &empty;${diaTor})</strong></p>`;
-  } else {
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Tu &le; &phi;Tth, Torsion neglected.</p>`;
-  }
-
-  // Shear design
-  const Vs_req = Math.max((designVu_N / phiShear) - Vc_design, 0);
-  const Av_s   = Vs_req / (fyWeb * d);
-  detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Req. Av/s (Shear) = ${Av_s.toFixed(3)} mm&sup2;/mm</p>`;
-
-  const min_Av_s = Math.max(0.062 * Math.sqrt(fc) * b / fyWeb, 0.35 * b / fyWeb);
-  let total_Av_s = Av_s + 2 * At_s;
-  detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Total Av/s (Shear + Torsion) = ${total_Av_s.toFixed(3)} mm&sup2;/mm</p>`;
-
-  if (total_Av_s < min_Av_s && (designVu_N > 0.5 * phiShear * Vc_concrete || Tu_Nmm > phiShear * Tth)) {
-    total_Av_s = min_Av_s;
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;Minimum reinforcement controls: Av/s = ${min_Av_s.toFixed(3)} mm&sup2;/mm</p>`;
-  }
-
-  let s = 0;
-  let smrf_s_max = 0;
-  const isConfinement = beamType === 'smrf' && secName.includes('Support');
-
-  if (total_Av_s > 0) {
-    s = Av / total_Av_s;
-    let s_max = Math.min(d / 2, 600);
-
-    if (beamType === 'smrf') {
-      if (isConfinement) {
-        // §18.6.4.4: Within 2h confinement zone
-        smrf_s_max = Math.min(d / 4, 6 * diaMain, 150);
-        s_max = Math.min(s_max, smrf_s_max);
-        detailsHTML += `<p class="calc-step"><strong>§18.6.4.4 Confinement Zone (2h = ${(2*h).toFixed(0)} mm):</strong> s_max = min(d/4=${(d/4).toFixed(0)}, 6db=${(6*diaMain).toFixed(0)}, 150) = ${smrf_s_max.toFixed(0)} mm</p>`;
-        detailsHTML += `<p class="calc-step">&nbsp;&nbsp;<em>Closed hoops with 135&deg; hooks required (§18.6.4.1)</em></p>`;
-      } else {
-        // §18.6.4.5: Outside confinement zone
-        s_max = Math.min(s_max, d / 2);
-        detailsHTML += `<p class="calc-step"><strong>§18.6.4.5 (Midspan / Outside Confinement):</strong> s_max = d/2 = ${(d/2).toFixed(0)} mm</p>`;
-      }
-    }
-
-    if (hasTorsion) {
-      const x1t = b - 2 * cover - diaWeb;
-      const y1t = h - 2 * cover - diaWeb;
-      s_max = Math.min(s_max, Math.min(2 * (x1t + y1t) / 8, 300));
-    }
-
-    s = Math.min(s, s_max);
-    s = Math.floor(s / 25) * 25;
-    if (s < 50) s = 50;
-
-    txtWeb = `D${diaWeb} @ ${s} mm`;
-    if (isConfinement)                            txtWeb = `1@50, rest @ ${s} mm (Hinge Zone)`;
-    else if (beamType === 'smrf')                 txtWeb += ` (Span)`;
-    else if (hasTorsion)                          txtWeb += ` (Shear+Tor)`;
-
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;<strong>Provided Stirrups: 1@50, rest &empty;${diaWeb} @ ${s} mm</strong>`;
-    if (isConfinement) detailsHTML += ` &nbsp;<em>(135&deg; closed hoops)</em>`;
-    detailsHTML += `</p>`;
-  } else {
-    txtWeb = 'Provide Min.';
-    detailsHTML += `<p class="calc-step">&nbsp;&nbsp;<strong>Provided Stirrups:</strong> Provide minimum spacing per code.</p>`;
-  }
-
-  detailsHTML += `</div>`;
-
-  const nTorBars = Math.ceil(Math.max(
-    At_s * ph * (fyWeb / fyTor),
-    (0.42 * Math.sqrt(fc) * Acp / fyTor) - (Math.max(At_s, (0.175 * b) / fyWeb) * ph * (fyWeb / fyTor))
-  ) / torBarArea) || 0;
-
-  // Capacities and DCR
-  let phiVn = phiShear * Vc_design / 1000; // 0 for SMRF
-  let phiTn = 0;
-  if (s > 0) {
-    phiVn += phiShear * (Av * fyWeb * d / s) / 1000;
-    if (hasTorsion) {
-      const x1c = b - 2 * cover - diaWeb;
-      const y1c = h - 2 * cover - diaWeb;
-      const Aoh = x1c * y1c;
-      const Ao  = 0.85 * Aoh;
-      phiTn = phiShear * (2 * Ao * (Av / (2 * s)) * fyWeb) / 1e6;
-    }
-  }
-
-  const dcrTop = phiMnTop > 0 ? (MuTop_kNm / phiMnTop) : 0;
-  const dcrBot = phiMnBot > 0 ? (MuBot_kNm / phiMnBot) : 0;
-  const dcrV   = phiVn   > 0 ? (designVu_kN / phiVn)   : 0;
-  const dcrT   = phiTn   > 0 ? (Tu_kNm / phiTn)         : 0;
-  const maxDCR = Math.max(dcrTop, dcrBot, dcrV, dcrT);
-
-  return {
-    top: txtTop,
-    bot: txtBot,
-    web: txtWeb,
-    tor: txtTor,
-    details: detailsHTML,
-    svgData: {
-      b, h, cover, topLayers, botLayers, diaMain, diaWeb, nTorBars, diaTor,
-      sSpacing: s || 0, smrf_s_max: smrf_s_max || 0, hasTorsion,
-      phiMnTop, phiMnBot, phiVn, phiTn, maxDCR,
-      txtTop, txtBot, txtWeb, txtTor,
-      Vu_kN: designVu_kN, // show Ve in card for SMRF
-      Tu_kNm
-    }
-  };
-}
+// ---------- Set defaults ----------
+document.getElementById('projDate').value = new Date().toISOString().split('T')[0];
 
 // ---------- Modal controls ----------
 const resultsModal = document.getElementById('resultsModal');
-const reopenBtn    = document.getElementById('reopenResultsBtn');
+const reopenBtn = document.getElementById('reopenResultsBtn');
 
 window.showNotes = function (calcId) {
   const content = document.getElementById(calcId).innerHTML;
@@ -417,170 +42,180 @@ document.getElementById('beamType').addEventListener('change', (e) => {
   if (card) card.style.display = e.target.value === 'smrf' ? '' : 'none';
 });
 
-document.getElementById('computeBtn').addEventListener('click', () => {
+document.getElementById('computeBtn').addEventListener('click', async () => {
   const beamType = document.getElementById('beamType').value;
-  const b      = parseFloat(document.getElementById('b').value)      || 0;
-  const h      = parseFloat(document.getElementById('h').value)      || 0;
+  const b = parseFloat(document.getElementById('b').value) || 0;
+  const h = parseFloat(document.getElementById('h').value) || 0;
   const spanLn = parseFloat(document.getElementById('spanLn').value) || 0;
-  const fc     = parseFloat(document.getElementById('fc').value)     || 0;
-  const cover  = parseFloat(document.getElementById('cover').value)  || 0;
+  const fc = parseFloat(document.getElementById('fc').value) || 0;
+  const cover = parseFloat(document.getElementById('cover').value) || 0;
 
-  const fyMain  = parseFloat(document.getElementById('fyMain').value)  || 0;
+  const fyMain = parseFloat(document.getElementById('fyMain').value) || 0;
   const diaMain = parseFloat(document.getElementById('diaMain').value) || 0;
-  const fyWeb   = parseFloat(document.getElementById('fyWeb').value)   || 0;
-  const diaWeb  = parseFloat(document.getElementById('diaWeb').value)  || 0;
-  const nLegs   = parseFloat(document.getElementById('nLegs').value)   || 0;
-  const fyTor   = parseFloat(document.getElementById('fyTor').value)   || 0;
-  const diaTor  = parseFloat(document.getElementById('diaTor').value)  || 0;
+  const fyWeb = parseFloat(document.getElementById('fyWeb').value) || 0;
+  const diaWeb = parseFloat(document.getElementById('diaWeb').value) || 0;
+  const nLegs = parseFloat(document.getElementById('nLegs').value) || 0;
+  const fyTor = parseFloat(document.getElementById('fyTor').value) || 0;
+  const diaTor = parseFloat(document.getElementById('diaTor').value) || 0;
 
-  const lambda  = parseFloat(document.getElementById('concreteWeight').value) || 1.0;
-  const maxAgg  = parseFloat(document.getElementById('maxAgg').value) || 20;
+  const lambda = parseFloat(document.getElementById('concreteWeight').value) || 1.0;
+  const maxAgg = parseFloat(document.getElementById('maxAgg').value) || 20;
 
   if (b <= 0 || h <= 0 || spanLn <= 0 || fc <= 0 || fyMain <= 0 || fyWeb <= 0 || nLegs <= 0 || fyTor <= 0 || cover <= 0) {
     alert('Please enter valid beam and reinforcement parameters.');
     return;
   }
 
-  const l_muTop = parseFloat(document.getElementById('leftMuTop').value)  || 0;
-  const l_muBot = parseFloat(document.getElementById('leftMuBot').value)  || 0;
-  const l_vu    = parseFloat(document.getElementById('leftVu').value)     || 0;
-  const l_tu    = parseFloat(document.getElementById('leftTu').value)     || 0;
-  const m_muTop = parseFloat(document.getElementById('midMuTop').value)   || 0;
-  const m_muBot = parseFloat(document.getElementById('midMuBot').value)   || 0;
-  const m_vu    = parseFloat(document.getElementById('midVu').value)      || 0;
-  const m_tu    = parseFloat(document.getElementById('midTu').value)      || 0;
-  const r_muTop = parseFloat(document.getElementById('rightMuTop').value) || 0;
-  const r_muBot = parseFloat(document.getElementById('rightMuBot').value) || 0;
-  const r_vu    = parseFloat(document.getElementById('rightVu').value)    || 0;
-  const r_tu    = parseFloat(document.getElementById('rightTu').value)    || 0;
-
-  let leftRes, midRes, rightRes;
+  // ── Build payload (matches all form fields) ──────────────────────────────
+  const payload = {
+    beamType, b, h, spanLn, fc, cover,
+    fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor,
+    lambda, maxAgg,
+    leftMuTop: parseFloat(document.getElementById('leftMuTop').value) || 0,
+    leftMuBot: parseFloat(document.getElementById('leftMuBot').value) || 0,
+    leftVu: parseFloat(document.getElementById('leftVu').value) || 0,
+    leftTu: parseFloat(document.getElementById('leftTu').value) || 0,
+    midMuTop: parseFloat(document.getElementById('midMuTop').value) || 0,
+    midMuBot: parseFloat(document.getElementById('midMuBot').value) || 0,
+    midVu: parseFloat(document.getElementById('midVu').value) || 0,
+    midTu: parseFloat(document.getElementById('midTu').value) || 0,
+    rightMuTop: parseFloat(document.getElementById('rightMuTop').value) || 0,
+    rightMuBot: parseFloat(document.getElementById('rightMuBot').value) || 0,
+    rightVu: parseFloat(document.getElementById('rightVu').value) || 0,
+    rightTu: parseFloat(document.getElementById('rightTu').value) || 0,
+    // Serviceability parameters
+    svc_wD: parseFloat(document.getElementById('svc_wD').value) || 0,
+    svc_wL: parseFloat(document.getElementById('svc_wL').value) || 0,
+    svc_sus: parseFloat(document.getElementById('svc_sus').value) || 0.3,
+    svc_support: document.getElementById('svc_support').value,
+    svc_sensitive: document.getElementById('svc_sensitive').value,
+  };
 
   if (beamType === 'smrf') {
-    // ══════════════════════════════════════════════════════════════════════
-    // SMRF 2-Pass Computation  —  ACI 318-14 §18.6
-    // ══════════════════════════════════════════════════════════════════════
-    const wD   = parseFloat(document.getElementById('wD').value)   || 0;
-    const wL   = parseFloat(document.getElementById('wL').value)   || 0;
-    const vg   = parseFloat(document.getElementById('vg').value)   || 0;
-    const bCol = parseFloat(document.getElementById('bCol').value) || 0;
-
-    const wu   = 1.2 * wD + 1.0 * wL;
-
+    const wu = 1.2 * (parseFloat(document.getElementById('wD').value) || 0)
+      + 1.0 * (parseFloat(document.getElementById('wL').value) || 0);
+    const vg = parseFloat(document.getElementById('vg').value) || 0;
     if (wu <= 0 && vg <= 0) {
       alert('SMRF mode requires Service Dead and Live loads, or an explicit Service Shear Vg.\nPlease enter them in the SMRF Seismic Parameters section.');
       return;
     }
+    payload.wD = parseFloat(document.getElementById('wD').value) || 0;
+    payload.wL = parseFloat(document.getElementById('wL').value) || 0;
+    payload.vg = vg;
+    payload.bCol = parseFloat(document.getElementById('bCol').value) || 0;
+  }
 
-    const mainBarArea = getRebarArea(diaMain);
-    const minBars2    = 2 * mainBarArea; // §18.6.3.1: min 2 bars
-    const d0 = h - cover - diaWeb - diaMain / 2; // nominal effective depth
+  // ── Call Python backend ──────────────────────────────────────────────────
+  // Uses standalone Python server on :8000 (bypasses Vercel dev module cache)
+  const computeBtn = document.getElementById('computeBtn');
+  const origText = computeBtn.textContent;
+  computeBtn.textContent = 'Calculating...';
+  computeBtn.disabled = true;
 
-    // ── Pass 1: Preliminary flexure for all sections ──────────────────────
-    const ltP = calculateFlexureLayers(l_muTop, b, h, cover, fc, fyMain, diaMain, diaWeb, 'smrf', maxAgg);
-    const lbP = calculateFlexureLayers(l_muBot, b, h, cover, fc, fyMain, diaMain, diaWeb, 'smrf', maxAgg);
-    const rtP = calculateFlexureLayers(r_muTop, b, h, cover, fc, fyMain, diaMain, diaWeb, 'smrf', maxAgg);
-    const rbP = calculateFlexureLayers(r_muBot, b, h, cover, fc, fyMain, diaMain, diaWeb, 'smrf', maxAgg);
+  const API_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000/api/compute_lrfd'
+    : '/api/compute_lrfd';
 
-    const d_LT = ltP.As > 0 ? ltP.d : d0;
-    const d_LB = lbP.As > 0 ? lbP.d : d0;
-    const d_RT = rtP.As > 0 ? rtP.d : d0;
-    const d_RB = rbP.As > 0 ? rbP.d : d0;
-
-    // Enforce §18.6.3.1 minimum 2 bars at every face
-    let As_LT = Math.max(ltP.As, minBars2);
-    let As_LB = Math.max(lbP.As, minBars2);
-    let As_RT = Math.max(rtP.As, minBars2);
-    let As_RB = Math.max(rbP.As, minBars2);
-
-    // §18.6.3.2 — 50% Rule at joint faces
-    if (As_LB < 0.5 * As_LT) As_LB = 0.5 * As_LT;
-    if (As_RB < 0.5 * As_RT) As_RB = 0.5 * As_RT;
-
-    // §18.6.3.2 — 25% Rule: min As at any section
-    const maxJointAs = Math.max(As_LT, As_LB, As_RT, As_RB);
-    const minAny     = Math.max(0.25 * maxJointAs, minBars2);
-
-    // ── Compute Mpr at each support face (§18.6.5, 1.25fy, φ=1.0) ─────────
-    const Mpr_LT = computeMpr(As_LT, fyMain, fc, b, d_LT);
-    const Mpr_LB = computeMpr(As_LB, fyMain, fc, b, d_LB);
-    const Mpr_RT = computeMpr(As_RT, fyMain, fc, b, d_RT);
-    const Mpr_RB = computeMpr(As_RB, fyMain, fc, b, d_RB);
-
-    // ── §18.6.5.1 Probable Shear ──────────────────────────────────────────
-    // Sway L→R:  left face hogging (top), right face sagging (bot)
-    //   Ve_left  = (Mpr_LT + Mpr_RB)/Ln + wu·Ln/2
-    //   Ve_right = (Mpr_LT + Mpr_RB)/Ln − wu·Ln/2
-    // Sway R→L:  left face sagging (bot), right face hogging (top)
-    //   Ve_left  = (Mpr_LB + Mpr_RT)/Ln − wu·Ln/2
-    //   Ve_right = (Mpr_LB + Mpr_RT)/Ln + wu·Ln/2
-    const wuShear   = vg > 0 ? vg : (wu * spanLn / 2);                      // kN
-    const sum_c1    = (Mpr_LT + Mpr_RB) / spanLn;           // kN
-    const sum_c2    = (Mpr_LB + Mpr_RT) / spanLn;
-
-    const Ve_L1 = sum_c1 + wuShear;  // sway L→R, left end
-    const Ve_L2 = sum_c2 - wuShear;  // sway R→L, left end
-    const Ve_R1 = sum_c1 - wuShear;  // sway L→R, right end
-    const Ve_R2 = sum_c2 + wuShear;  // sway R→L, right end
-
-    const Ve_left  = Math.max(Math.abs(Ve_L1), Math.abs(Ve_L2));
-    const Ve_right = Math.max(Math.abs(Ve_R1), Math.abs(Ve_R2));
-    const Ve_mid   = (Ve_left + Ve_right) / 2; // linear midpoint
-
-    const smrfBase = { Mpr_LT, Mpr_LB, Mpr_RT, Mpr_RB, wu, wD, wL, vg, wuShear, minAny, maxJointAs, bCol };
-
-    const smrfLeft  = { ...smrfBase, ve_kN: Ve_left,  Ve_case1: Ve_L1, Ve_case2: Ve_L2 };
-    const smrfMid   = { ...smrfBase, ve_kN: Ve_mid,   Ve_case1: Ve_L1, Ve_case2: Ve_L2 };
-    const smrfRight = { ...smrfBase, ve_kN: Ve_right, Ve_case1: Ve_R1, Ve_case2: Ve_R2 };
-
-    // ── Pass 2: Full design with SMRF data ────────────────────────────────
-    leftRes  = computeSection('Left Support',  beamType, l_muTop, l_muBot, l_vu, l_tu, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda, maxAgg, smrfLeft);
-    midRes   = computeSection('Midspan',       beamType, m_muTop, m_muBot, m_vu, m_tu, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda, maxAgg, smrfMid);
-    rightRes = computeSection('Right Support', beamType, r_muTop, r_muBot, r_vu, r_tu, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda, maxAgg, smrfRight);
-
-  } else {
-    // ── Standard Gravity Computation ─────────────────────────────────────
-    leftRes  = computeSection('Left Support',  beamType, l_muTop, l_muBot, l_vu, l_tu, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda, maxAgg);
-    midRes   = computeSection('Midspan',       beamType, m_muTop, m_muBot, m_vu, m_tu, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda, maxAgg);
-    rightRes = computeSection('Right Support', beamType, r_muTop, r_muBot, r_vu, r_tu, b, h, spanLn, cover, fc, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor, lambda, maxAgg);
+  let leftRes, midRes, rightRes, svcRes;
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      alert('Computation error: ' + (data.error || resp.statusText));
+      return;
+    }
+    leftRes = data.leftRes;
+    midRes = data.midRes;
+    rightRes = data.rightRes;
+    svcRes = data.svcRes;
+  } catch (err) {
+    alert('Network error -- could not reach the compute API.\n' + err.message);
+    return;
+  } finally {
+    computeBtn.textContent = origText;
+    computeBtn.disabled = false;
   }
 
   // ── Update results table ────────────────────────────────────────────────
-  document.getElementById('resLeftTop').textContent  = leftRes.top;
-  document.getElementById('resLeftBot').textContent  = leftRes.bot;
-  document.getElementById('resLeftWeb').textContent  = leftRes.web;
-  document.getElementById('resLeftTor').textContent  = leftRes.tor;
-  document.getElementById('calcLeft').innerHTML      = leftRes.details;
+  document.getElementById('resLeftTop').textContent = leftRes.top;
+  document.getElementById('resLeftBot').textContent = leftRes.bot;
+  document.getElementById('resLeftWeb').textContent = leftRes.web;
+  document.getElementById('resLeftTor').textContent = leftRes.tor;
+  document.getElementById('calcLeft').innerHTML = leftRes.details;
 
-  document.getElementById('resMidTop').textContent   = midRes.top;
-  document.getElementById('resMidBot').textContent   = midRes.bot;
-  document.getElementById('resMidWeb').textContent   = midRes.web;
-  document.getElementById('resMidTor').textContent   = midRes.tor;
-  document.getElementById('calcMid').innerHTML       = midRes.details;
+  document.getElementById('resMidTop').textContent = midRes.top;
+  document.getElementById('resMidBot').textContent = midRes.bot;
+  document.getElementById('resMidWeb').textContent = midRes.web;
+  document.getElementById('resMidTor').textContent = midRes.tor;
+  document.getElementById('calcMid').innerHTML = midRes.details;
 
   document.getElementById('resRightTop').textContent = rightRes.top;
   document.getElementById('resRightBot').textContent = rightRes.bot;
   document.getElementById('resRightWeb').textContent = rightRes.web;
   document.getElementById('resRightTor').textContent = rightRes.tor;
-  document.getElementById('calcRight').innerHTML     = rightRes.details;
+  document.getElementById('calcRight').innerHTML = rightRes.details;
 
   // ── Diagrams ────────────────────────────────────────────────────────────
   const diagContainer = document.getElementById('diagramContainer');
   let diagHTML = `<h3 style="text-align:center; color:var(--amber); margin-bottom:1rem;">Detailing Diagrams</h3>`;
   diagHTML += drawElevationSVG(spanLn, beamType, leftRes.svgData, midRes.svgData, rightRes.svgData);
   diagHTML += `<div class="cross-sections-row" style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;">`;
-  diagHTML += `<div class="diagram-wrapper" style="flex:1; min-width:250px; width:100%;">${drawCrossSectionSVG('Left Support',  leftRes.svgData)}</div>`;
-  diagHTML += `<div class="diagram-wrapper" style="flex:1; min-width:250px; width:100%;">${drawCrossSectionSVG('Midspan',       midRes.svgData)}</div>`;
+  diagHTML += `<div class="diagram-wrapper" style="flex:1; min-width:250px; width:100%;">${drawCrossSectionSVG('Left Support', leftRes.svgData)}</div>`;
+  diagHTML += `<div class="diagram-wrapper" style="flex:1; min-width:250px; width:100%;">${drawCrossSectionSVG('Midspan', midRes.svgData)}</div>`;
   diagHTML += `<div class="diagram-wrapper" style="flex:1; min-width:250px; width:100%;">${drawCrossSectionSVG('Right Support', rightRes.svgData)}</div>`;
   diagHTML += `</div>`;
   diagContainer.innerHTML = diagHTML;
 
+  // ── Serviceability Results ──────────────────────────────────────────────
+  const svcPanel = document.getElementById('svcResults');
+  const svcBody  = document.getElementById('svcTableBody');
+  const svcDet   = document.getElementById('svcDetails');
+  if (svcRes && svcRes.summary && svcRes.summary.length) {
+    svcPanel.style.display = '';
+    svcBody.innerHTML = svcRes.summary.map(row => {
+      const badge = row.pass
+        ? '<span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75rem;">PASS</span>'
+        : '<span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75rem;">FAIL</span>';
+      return `<tr><td>${row.label}</td><td>${row.computed}</td><td>${row.allow}</td><td>${badge}</td></tr>`;
+    }).join('');
+    if (svcDet) svcDet.innerHTML = svcRes.details || '';
+  } else {
+    svcPanel.style.display = 'none';
+  }
+
   openResultsModal();
   reopenBtn.style.display = 'inline-block';
 
+  // ── Sync SMRF wD/wL with serviceability fields ───────────────────────────
+  if (beamType === 'smrf') {
+    const smrfWD = parseFloat(document.getElementById('wD')?.value) || 0;
+    const smrfWL = parseFloat(document.getElementById('wL')?.value) || 0;
+    if (smrfWD) document.getElementById('svc_wD').value = smrfWD;
+    if (smrfWL) document.getElementById('svc_wL').value = smrfWL;
+  }
+
   window.currentDesignData = {
     beamType, b, h, spanLn, fc, cover, fyMain, diaMain, fyWeb, diaWeb, nLegs, fyTor, diaTor,
-    leftRes, midRes, rightRes
+    leftRes, midRes, rightRes, svcRes,
+    proj: {
+      name:       document.getElementById('projName').value || '',
+      no:         document.getElementById('projNo').value || '',
+      client:     document.getElementById('projClient').value || '',
+      designedBy: document.getElementById('projDesignedBy').value || '',
+      checkedBy:  document.getElementById('projCheckedBy').value || '',
+      date:       document.getElementById('projDate').value || '',
+    },
+    svcInputs: {
+      wD:        parseFloat(document.getElementById('svc_wD').value) || 0,
+      wL:        parseFloat(document.getElementById('svc_wL').value) || 0,
+      sus:       parseFloat(document.getElementById('svc_sus').value) || 0.3,
+      support:   document.getElementById('svc_support').options[document.getElementById('svc_support').selectedIndex].text,
+      sensitive: document.getElementById('svc_sensitive').options[document.getElementById('svc_sensitive').selectedIndex].text,
+    },
   };
 });
 document.getElementById('downloadPdfBtn').addEventListener('click', () => {
@@ -593,7 +228,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
   /**
    * Convert an HTML string (produced by computeSection) into a pdfmake
    * content array.  We parse the lightweight subset produced by our code:
-   *   <div class="calc-section"><h4>…</h4><p class="calc-step">…</p>…</div>
+   *   <div class="calc-section"><h4>...</h4><p class="calc-step">...</p>...</div>
    * We deliberately do NOT use html-to-pdfmake because the source HTML
    * embeds CSS-variable inline styles that pdfmake cannot resolve.
    */
@@ -616,7 +251,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
       }
 
       // Calc steps
-      sec.querySelectorAll('.p').forEach(() => {}); // no-op; use generic
+      sec.querySelectorAll('.p').forEach(() => { }); // no-op; use generic
       const steps = sec.querySelectorAll('p');
       steps.forEach(p => {
         const rawText = p.textContent.replace(/\u00a0/g, ' ').trim();
@@ -654,7 +289,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
   }
 
   /**
-   * Draw a cross-section SVG with NO CSS variables – uses hard-coded hex
+   * Draw a cross-section SVG with NO CSS variables -- uses hard-coded hex
    * colours so pdfmake can render it correctly.
    */
   function drawPdfCrossSectionSVG(data) {
@@ -702,7 +337,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
       }
     }
 
-    // Dimension labels – no CSS font vars
+    // Dimension labels -- no CSS font vars
     svg += `<text x="${offsetX + sw / 2}" y="${offsetY - 6}" text-anchor="middle" font-size="10" font-family="Helvetica" font-weight="bold" fill="#475569">${b.toFixed(0)} mm</text>`;
     svg += `<text x="${offsetX - 8}" y="${offsetY + sh / 2}" text-anchor="middle" font-size="10" font-family="Helvetica" font-weight="bold" fill="#475569" transform="rotate(-90 ${offsetX - 8} ${offsetY + sh / 2})">${h.toFixed(0)} mm</text>`;
 
@@ -785,10 +420,10 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
         widths: ['*', '*'],
         body: [
           [{ text: 'Capacity', colSpan: 2, bold: true, fontSize: 8, fillColor: '#f8fafc', color: '#1e293b' }, {}],
-          [{ text: '\u03c6Mn Top', fontSize: 8 }, { text: `${phiMnTop.toFixed(1)} kN·m`, fontSize: 8 }],
-          [{ text: '\u03c6Mn Bot', fontSize: 8 }, { text: `${phiMnBot.toFixed(1)} kN·m`, fontSize: 8 }],
+          [{ text: '\u03c6Mn Top', fontSize: 8 }, { text: `${phiMnTop.toFixed(1)} kN\u00B7m`, fontSize: 8 }],
+          [{ text: '\u03c6Mn Bot', fontSize: 8 }, { text: `${phiMnBot.toFixed(1)} kN\u00B7m`, fontSize: 8 }],
           [{ text: '\u03c6Vn / Vu', fontSize: 8 }, { text: `${phiVn.toFixed(1)} / ${Vu_kN.toFixed(1)} kN`, fontSize: 8 }],
-          [{ text: '\u03c6Tn', fontSize: 8 }, { text: `${phiTn.toFixed(1)} kN·m`, fontSize: 8 }],
+          [{ text: '\u03c6Tn', fontSize: 8 }, { text: `${phiTn.toFixed(1)} kN\u00B7m`, fontSize: 8 }],
           [{ text: 'DCR', bold: true, fontSize: 8 }, { text: `${maxDCR.toFixed(2)} ${maxDCR <= 1.0 ? '\u2264' : '>'} 1.00`, bold: true, fontSize: 8, color: dcrColor }],
           [{ text: 'Reinforcement', colSpan: 2, bold: true, fontSize: 8, fillColor: '#f8fafc', color: '#1e293b' }, {}],
           [{ text: 'Top Bars', fontSize: 8 }, { text: txtTop, fontSize: 8 }],
@@ -809,7 +444,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
 
     header: (currentPage, pageCount) => ({
       columns: [
-        { text: 'LRFD Beam Design Report', fontSize: 8, color: '#94a3b8', margin: [40, 20, 0, 0] },
+        { text: (d.proj && d.proj.name) ? `${d.proj.name}  \u2014  LRFD Beam Design` : 'LRFD Beam Design Report', fontSize: 8, color: '#94a3b8', margin: [40, 20, 0, 0] },
         { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, color: '#94a3b8', alignment: 'right', margin: [0, 20, 40, 0] }
       ]
     }),
@@ -834,6 +469,41 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
         canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#e2e8f0' }],
         margin: [0, 8, 0, 14]
       },
+      // ── Project Information ─────────────────────────────────────────────────
+      ...(d.proj && (d.proj.name || d.proj.no || d.proj.designedBy) ? [{
+        table: {
+          widths: ['*', '*'],
+          body: [
+            [
+              {
+                stack: [
+                  { text: d.proj.name || '\u2014', fontSize: 14, bold: true, color: '#1e293b', margin: [0, 0, 0, 2] },
+                  { text: `Project No.: ${d.proj.no || '\u2014'}`, fontSize: 8, color: '#64748b' },
+                  { text: `Client: ${d.proj.client || '\u2014'}`, fontSize: 8, color: '#64748b' }
+                ],
+                border: [false, false, false, false]
+              },
+              {
+                stack: [
+                  { text: `Designed by: ${d.proj.designedBy || '\u2014'}`, fontSize: 8, color: '#475569', margin: [0, 2, 0, 1] },
+                  { text: `Checked by:  ${d.proj.checkedBy || '\u2014'}`, fontSize: 8, color: '#475569', margin: [0, 0, 0, 1] },
+                  { text: `Date: ${d.proj.date || '\u2014'}`, fontSize: 8, color: '#475569' }
+                ],
+                alignment: 'right',
+                border: [false, false, false, false]
+              }
+            ]
+          ]
+        },
+        layout: 'noBorders',
+        margin: [0, 0, 0, 6]
+      }, {
+        canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#e2e8f0' }],
+        margin: [0, 0, 0, 14]
+      }] : [{
+        canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#e2e8f0' }],
+        margin: [0, 8, 0, 14]
+      }]),
 
       // ── Input Parameters ───────────────────────────────────────────────────
       { text: 'INPUT PARAMETERS', style: 'sectionLabel' },
@@ -867,9 +537,9 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
                 table: {
                   widths: ['*', '*'],
                   body: [
-                    [{ text: 'fy Main', bold: true, fontSize: 9 }, { text: `${d.fyMain} MPa, D${d.diaMain}`, fontSize: 9 }],
-                    [{ text: 'fy Stirrup', bold: true, fontSize: 9 }, { text: `${d.fyWeb} MPa, D${d.diaWeb} (${d.nLegs} legs)`, fontSize: 9 }],
-                    [{ text: 'fy Torsion', bold: true, fontSize: 9 }, { text: `${d.fyTor} MPa, D${d.diaTor}`, fontSize: 9 }]
+                    [{ text: 'fy Main', bold: true, fontSize: 9 }, { text: `${d.fyMain} MPa, \u00D8${d.diaMain}`, fontSize: 9 }],
+                    [{ text: 'fy Stirrup', bold: true, fontSize: 9 }, { text: `${d.fyWeb} MPa, \u00D8${d.diaWeb} (${d.nLegs} legs)`, fontSize: 9 }],
+                    [{ text: 'fy Torsion', bold: true, fontSize: 9 }, { text: `${d.fyTor} MPa, \u00D8${d.diaTor}`, fontSize: 9 }]
                   ]
                 },
                 layout: 'lightHorizontalLines'
@@ -898,8 +568,8 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
             summaryRow('Bottom Main Bars', d.leftRes.svgData.txtBot, d.midRes.svgData.txtBot, d.rightRes.svgData.txtBot),
             summaryRow('Stirrups', d.leftRes.svgData.txtWeb, d.midRes.svgData.txtWeb, d.rightRes.svgData.txtWeb),
             summaryRow('Torsion Bars', d.leftRes.svgData.txtTor, d.midRes.svgData.txtTor, d.rightRes.svgData.txtTor),
-            summaryRow('\u03c6Mn Top (kN·m)', `${d.leftRes.svgData.phiMnTop.toFixed(1)}`, `${d.midRes.svgData.phiMnTop.toFixed(1)}`, `${d.rightRes.svgData.phiMnTop.toFixed(1)}`),
-            summaryRow('\u03c6Mn Bot (kN·m)', `${d.leftRes.svgData.phiMnBot.toFixed(1)}`, `${d.midRes.svgData.phiMnBot.toFixed(1)}`, `${d.rightRes.svgData.phiMnBot.toFixed(1)}`),
+            summaryRow('\u03c6Mn Top (kN\u00B7m)', `${d.leftRes.svgData.phiMnTop.toFixed(1)}`, `${d.midRes.svgData.phiMnTop.toFixed(1)}`, `${d.rightRes.svgData.phiMnTop.toFixed(1)}`),
+            summaryRow('\u03c6Mn Bot (kN\u00B7m)', `${d.leftRes.svgData.phiMnBot.toFixed(1)}`, `${d.midRes.svgData.phiMnBot.toFixed(1)}`, `${d.rightRes.svgData.phiMnBot.toFixed(1)}`),
             summaryRow('\u03c6Vn (kN)', `${d.leftRes.svgData.phiVn.toFixed(1)}`, `${d.midRes.svgData.phiVn.toFixed(1)}`, `${d.rightRes.svgData.phiVn.toFixed(1)}`),
             summaryRow('Max DCR', `${d.leftRes.svgData.maxDCR.toFixed(2)}`, `${d.midRes.svgData.maxDCR.toFixed(2)}`, `${d.rightRes.svgData.maxDCR.toFixed(2)}`)
           ]
@@ -911,7 +581,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
       },
 
       // ── Beam Elevation Diagram ─────────────────────────────────────────────
-      { text: 'BEAM ELEVATION — DETAILING ZONES', style: 'sectionLabel' },
+      { text: 'BEAM ELEVATION -- DETAILING ZONES', style: 'sectionLabel' },
       {
         svg: drawPdfElevationSVG(d.spanLn, d.beamType, d.leftRes.svgData, d.midRes.svgData, d.rightRes.svgData),
         width: 500,
@@ -920,7 +590,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
       },
 
       // ── Cross Section Diagrams ─────────────────────────────────────────────
-      { text: 'CROSS-SECTION DIAGRAMS', style: 'sectionLabel' },
+      { text: 'CROSS-SECTION DIAGRAMS', style: 'sectionLabel', pageBreak: 'before' },
       {
         columns: [
           {
@@ -954,17 +624,59 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
 
       // ── Detailed Calculations ──────────────────────────────────────────────
       {
-        text: 'DETAILED CALCULATIONS — LEFT SUPPORT',
+        text: 'DETAILED CALCULATIONS -- LEFT SUPPORT',
         style: 'sectionLabel',
         pageBreak: 'before'
       },
       ...calcHtmlToPdf(d.leftRes.details),
 
-      { text: 'DETAILED CALCULATIONS — MIDSPAN', style: 'sectionLabel', pageBreak: 'before' },
+      { text: 'DETAILED CALCULATIONS -- MIDSPAN', style: 'sectionLabel', pageBreak: 'before' },
       ...calcHtmlToPdf(d.midRes.details),
 
-      { text: 'DETAILED CALCULATIONS — RIGHT SUPPORT', style: 'sectionLabel', pageBreak: 'before' },
-      ...calcHtmlToPdf(d.rightRes.details)
+      { text: 'DETAILED CALCULATIONS -- RIGHT SUPPORT', style: 'sectionLabel', pageBreak: 'before' },
+      ...calcHtmlToPdf(d.rightRes.details),
+
+      // ── Serviceability Check ───────────────────────────────────────────────
+      ...(d.svcRes ? [
+        { text: 'SERVICEABILITY CHECK (ACI 318-14 \u00a724 / NSCP 2015 \u00a7406)', style: 'sectionLabel', pageBreak: 'before' },
+        // Summary table
+        {
+          table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', 'auto'],
+            body: [
+              [
+                { text: 'Check', bold: true, fontSize: 9, fillColor: '#1e293b', color: '#f8fafc' },
+                { text: 'Computed', bold: true, fontSize: 9, fillColor: '#1e293b', color: '#f8fafc' },
+                { text: 'Allowable', bold: true, fontSize: 9, fillColor: '#1e293b', color: '#f8fafc' },
+                { text: 'Status', bold: true, fontSize: 9, fillColor: '#1e293b', color: '#f8fafc' }
+              ],
+              ...(d.svcRes.summary || []).map(row => [
+                { text: row.label, fontSize: 9 },
+                { text: row.computed, fontSize: 9 },
+                { text: row.allow, fontSize: 9 },
+                { text: row.pass ? 'PASS' : 'FAIL', fontSize: 9, bold: true, color: row.pass ? '#16a34a' : '#dc2626' }
+              ])
+            ]
+          },
+          layout: { fillColor: (r) => r % 2 === 1 ? '#f8fafc' : null },
+          margin: [0, 0, 0, 16]
+        },
+        // Serviceability inputs summary
+        ...(d.svcInputs ? [{
+          columns: [
+            { text: `wD = ${d.svcInputs.wD} kN/m`, fontSize: 8, color: '#475569' },
+            { text: `wL = ${d.svcInputs.wL} kN/m`, fontSize: 8, color: '#475569' },
+            { text: `\u03b2sus = ${d.svcInputs.sus}`, fontSize: 8, color: '#475569' },
+            { text: d.svcInputs.support, fontSize: 8, color: '#475569' },
+            { text: d.svcInputs.sensitive, fontSize: 8, color: '#475569' }
+          ],
+          columnGap: 8,
+          margin: [0, 0, 0, 14]
+        }] : []),
+        // Detailed serviceability calcs
+        ...calcHtmlToPdf(d.svcRes.details || '')
+      ] : [])
     ],
 
     styles: {
