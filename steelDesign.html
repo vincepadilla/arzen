@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Steel Section Design — Arzen Navor</title>
+  <meta name="description" content="Design and check steel members using LRFD and ASD per NSCP 2015 / AISC 360.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="steelDesign.css?v=3">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <nav>
+    <div class="nav-logo">ARZN<span>.</span> Admin</div>
+    <ul class="nav-links"><li><a href="/admin.html">Back to Admin</a></li></ul>
+  </nav>
+
+  <div class="sd-page">
+    <div class="sd-shell">
+
+      <div class="sd-header">
+        <h1>Steel Section Design</h1>
+        <p>Design and check steel members — NSCP 2015 / AISC 360 &nbsp;|&nbsp; LRFD &amp; ASD</p>
+      </div>
+
+      <!-- Step Wizard Nav -->
+      <div class="sd-steps" id="sdSteps" role="tablist">
+        <button class="sd-step-btn is-active" data-step="0" id="step-btn-0">
+          <span class="sd-step-num">1</span>Section
+        </button>
+        <button class="sd-step-btn" data-step="1" id="step-btn-1">
+          <span class="sd-step-num">2</span>Material
+        </button>
+        <button class="sd-step-btn" data-step="2" id="step-btn-2">
+          <span class="sd-step-num">3</span>Parameters
+        </button>
+        <button class="sd-step-btn" data-step="3" id="step-btn-3">
+          <span class="sd-step-num">4</span>Loads
+        </button>
+        <button class="sd-step-btn" data-step="4" id="step-btn-4">
+          <span class="sd-step-num">5</span>Results
+        </button>
+      </div>
+
+      <!-- STEP 1: SECTION -->
+      <div class="sd-step-panel is-active" id="sd-panel-0">
+        <div class="sd-card">
+          <div class="sd-card-title"><i class="fas fa-ruler-combined"></i> Member Application</div>
+          <div class="sd-form-grid">
+            <div class="sd-field">
+              <label class="sd-label">Member Type</label>
+              <select id="memberType" class="sd-select">
+                <option value="beam">Beam</option>
+                <option value="column">Column</option>
+                <option value="brace">Brace</option>
+                <option value="tension">Tension Member</option>
+                <option value="compression">Compression Member</option>
+                <option value="beam-column">Beam-Column</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="sd-card">
+          <div class="sd-card-title"><i class="fas fa-search"></i> Section Library &nbsp;<span class="sd-result-count">(<span id="resultCount">0</span> results)</span></div>
+          <div class="sd-picker-layout">
+            <div class="sd-filter-sidebar">
+              <div class="sd-field">
+                <label class="sd-label">Shape Family</label>
+                <select id="sectionType" class="sd-select">
+                  <option value="all">All Shapes</option>
+                  <option value="w-shape">W-Shape (Wide Flange)</option>
+                  <option value="c-shape">C-Shape (Channel)</option>
+                  <option value="angle">L-Shape (Angle)</option>
+                  <option value="hss-rect">HSS Rectangular</option>
+                  <option value="hss-round">HSS Round</option>
+                </select>
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Search Designation</label>
+                <input type="text" id="searchDesignation" class="sd-input" placeholder="e.g. W18x35">
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Weight Range (kg/m)</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="number" id="minWeight" class="sd-input" placeholder="Min">
+                  <input type="number" id="maxWeight" class="sd-input" placeholder="Max">
+                </div>
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Depth Range (mm)</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="number" id="minDepth" class="sd-input" placeholder="Min">
+                  <input type="number" id="maxDepth" class="sd-input" placeholder="Max">
+                </div>
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Area Range (mm&sup2;)</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="number" id="minArea" class="sd-input" placeholder="Min">
+                  <input type="number" id="maxArea" class="sd-input" placeholder="Max">
+                </div>
+              </div>
+            </div>
+            <div class="sd-section-list-wrap">
+              <div class="sd-section-list" id="sectionsList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section Details -->
+        <div class="sd-card" id="sectionDetailsCard">
+          <div class="sd-card-title"><i class="fas fa-drafting-compass"></i> Section Details</div>
+          <div class="sd-detail-layout">
+            <div id="sectionPropertiesContainer">
+              <p style="color:var(--mist);font-family:var(--font-m);font-size:0.9rem;">Select a section to view properties.</p>
+            </div>
+            <div class="sd-illus-panel">
+              <div class="illustration-container" id="memberIllustration">
+                <p style="color:var(--mist);font-family:var(--font-m);font-size:0.85rem;text-align:center;">Illustration appears here</p>
+              </div>
+            </div>
+          </div>
+          <div id="builtUpTriggerBar" style="display:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div style="color:var(--mist);font-size:0.85rem;">
+                <i class="fas fa-info-circle" style="margin-right:5px;"></i>
+                W section selected. Design a custom built-up member from this starting point.
+              </div>
+              <button id="createBuiltUpBtn" class="sd-btn">
+                <i class="fas fa-drafting-compass"></i> Create Built-Up Section
+              </button>
+            </div>
+          </div>
+          <div id="builtUpPanel" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- STEP 2: MATERIAL -->
+      <div class="sd-step-panel" id="sd-panel-1">
+        <div class="sd-card">
+          <div class="sd-card-title"><i class="fas fa-atom"></i> Material Properties</div>
+          <div class="sd-field" style="margin-bottom:1.25rem;">
+            <label class="sd-label">Material Grade</label>
+            <select id="materialGrade" class="sd-select">
+              <option value="a36">A36</option>
+              <option value="a572-50">A572 Grade 50</option>
+              <option value="a992" selected>A992</option>
+              <option value="a500-b">A500 Grade B</option>
+              <option value="a500-c">A500 Grade C</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="sd-mat-chips">
+            <div class="sd-mat-chip">
+              <span class="sd-mat-chip-lbl">Yield Strength, Fy</span>
+              <input type="number" id="fy" value="345" readonly class="sd-mat-chip-val" style="background:transparent;border:none;color:var(--amber);font-family:var(--font-b);font-size:1rem;font-weight:600;padding:0;width:100%;outline:none;">
+              <span class="sd-mat-chip-unit">MPa</span>
+            </div>
+            <div class="sd-mat-chip">
+              <span class="sd-mat-chip-lbl">Tensile Strength, Fu</span>
+              <input type="number" id="fu" value="450" readonly class="sd-mat-chip-val" style="background:transparent;border:none;color:var(--amber);font-family:var(--font-b);font-size:1rem;font-weight:600;padding:0;width:100%;outline:none;">
+              <span class="sd-mat-chip-unit">MPa</span>
+            </div>
+            <div class="sd-mat-chip">
+              <span class="sd-mat-chip-lbl">Elastic Modulus, E</span>
+              <input type="number" id="E" value="200000" readonly class="sd-mat-chip-val" style="background:transparent;border:none;color:var(--amber);font-family:var(--font-b);font-size:1rem;font-weight:600;padding:0;width:100%;outline:none;">
+              <span class="sd-mat-chip-unit">MPa</span>
+            </div>
+            <div class="sd-mat-chip">
+              <span class="sd-mat-chip-lbl">Shear Modulus, G</span>
+              <input type="number" id="G" value="77200" readonly class="sd-mat-chip-val" style="background:transparent;border:none;color:var(--amber);font-family:var(--font-b);font-size:1rem;font-weight:600;padding:0;width:100%;outline:none;">
+              <span class="sd-mat-chip-unit">MPa</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3: PARAMETERS -->
+      <div class="sd-step-panel" id="sd-panel-2">
+        <div class="sd-card">
+          <div class="sd-card-title"><i class="fas fa-sliders-h"></i> Design Settings</div>
+          <div class="sd-form-grid" style="margin-bottom:1.25rem;">
+            <div class="sd-field">
+              <label class="sd-label">Design Code</label>
+              <select id="designCode" class="sd-select">
+                <option value="nscp2015-aisc360-10">NSCP 2015 / AISC 360-10</option>
+              </select>
+            </div>
+            <div class="sd-field">
+              <label class="sd-label">Design Method</label>
+              <select id="designMethod" class="sd-select">
+                <option value="lrfd">LRFD</option>
+                <option value="asd">ASD</option>
+              </select>
+            </div>
+            <div class="sd-field">
+              <label class="sd-label">Length Units</label>
+              <select id="lengthUnit" class="sd-select">
+                <option value="m">Meters (m)</option>
+                <option value="mm">Millimeters (mm)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="sd-card-title" style="margin-top:0.5rem;border-top:1px solid var(--line,#2a2a3a);padding-top:1rem;"><i class="fas fa-ruler"></i> Member Geometry</div>
+          <div class="sd-form-grid">
+            <div class="sd-field" id="group-l">
+              <label class="sd-label">Member Length, L (<span class="unit-lbl">m</span>)</label>
+              <input type="number" id="memberLength" class="sd-input" placeholder="e.g. 5.0" value="5.0" min="0">
+            </div>
+            <div class="sd-field" id="group-lbx">
+              <label class="sd-label">Unbraced Length Major, Lbx (<span class="unit-lbl">m</span>)</label>
+              <input type="number" id="unbracedLengthX" class="sd-input" placeholder="e.g. 5.0" value="5.0" min="0">
+            </div>
+            <div class="sd-field" id="group-lby">
+              <label class="sd-label">Unbraced Length Minor, Lby (<span class="unit-lbl">m</span>)</label>
+              <input type="number" id="unbracedLengthY" class="sd-input" placeholder="e.g. 5.0" value="5.0" min="0">
+            </div>
+            <div class="sd-field" id="group-lbt">
+              <label class="sd-label">Unsupp. Length Top Flange, Lbt (<span class="unit-lbl">m</span>)</label>
+              <input type="number" id="unbracedLengthTop" class="sd-input" placeholder="e.g. 5.0" value="5.0" min="0">
+            </div>
+            <div class="sd-field" id="group-lbb">
+              <label class="sd-label">Unsupp. Length Bot Flange, Lbb (<span class="unit-lbl">m</span>)</label>
+              <input type="number" id="unbracedLengthBot" class="sd-input" placeholder="e.g. 5.0" value="5.0" min="0">
+            </div>
+            <div class="sd-field" id="group-kx">
+              <label class="sd-label">Effective Length Factor, Kx</label>
+              <input type="number" id="kxFactor" class="sd-input" placeholder="e.g. 1.0" value="1.0" min="0.1">
+            </div>
+            <div class="sd-field" id="group-ky">
+              <label class="sd-label">Effective Length Factor, Ky</label>
+              <input type="number" id="kyFactor" class="sd-input" placeholder="e.g. 1.0" value="1.0" min="0.1">
+            </div>
+            <div class="sd-field" id="group-kz">
+              <label class="sd-label">Effective Length Factor, Kz</label>
+              <input type="number" id="kzFactor" class="sd-input" placeholder="e.g. 1.0" value="1.0" min="0.1">
+            </div>
+            <div class="sd-field" id="group-cb">
+              <label class="sd-label">Cb Factor</label>
+              <input type="number" id="cbFactor" class="sd-input" placeholder="e.g. 1.0" value="1.0" min="0.1">
+            </div>
+          </div>
+        </div>
+
+        <div class="sd-card">
+          <div class="sd-seismic-toggle-row">
+            <input type="checkbox" id="seismicToggle">
+            <label for="seismicToggle" style="color:var(--chalk);font-weight:500;">Enable Seismic / SMRF Design</label>
+            <span class="sd-seismic-badge">AISC 341-16</span>
+          </div>
+          <div id="seismicParams" class="sd-form-grid" style="display:none;">
+            <div class="sd-field">
+              <label class="sd-label">Seismic System</label>
+              <select id="seismicSystem" class="sd-select">
+                <option value="smrf">Special Moment Frame (SMRF)</option>
+                <option value="imrf">Intermediate Moment Frame (IMRF)</option>
+                <option value="omrf">Ordinary Moment Frame (OMRF)</option>
+              </select>
+            </div>
+            <div class="sd-field">
+              <label class="sd-label">Seismic Design Category</label>
+              <select id="sdc" class="sd-select">
+                <option value="d">D</option>
+                <option value="e">E</option>
+                <option value="f">F</option>
+                <option value="c">C</option>
+              </select>
+            </div>
+            <div class="sd-field">
+              <label class="sd-label">Required Ductility</label>
+              <select id="ductilityLevel" class="sd-select">
+                <option value="high">High Ductility</option>
+                <option value="moderate">Moderate Ductility</option>
+                <option value="low">Low Ductility</option>
+              </select>
+            </div>
+            <div class="sd-field">
+              <label class="sd-label">Compactness Requirements</label>
+              <select id="compactnessReq" class="sd-select">
+                <option value="highly-ductile">Highly Ductile</option>
+                <option value="moderately-ductile">Moderately Ductile</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 4: LOADS -->
+      <div class="sd-step-panel" id="sd-panel-3">
+        <div class="sd-card">
+          <div class="sd-card-title"><i class="fas fa-weight-hanging"></i> Applied Loads</div>
+          <div class="sd-load-grid">
+            <div class="sd-load-chip" id="group-pu">
+              <div class="sd-load-chip-header">
+                <div class="sd-load-chip-icon"><i class="fas fa-arrows-alt-v"></i></div>
+                <span class="sd-load-chip-label">Axial Force<br>Pu / Pa (kN)</span>
+              </div>
+              <input type="number" id="loadPu" class="sd-load-input" placeholder="0" value="0">
+            </div>
+            <div class="sd-load-chip" id="group-vux">
+              <div class="sd-load-chip-header">
+                <div class="sd-load-chip-icon"><i class="fas fa-arrows-alt-h"></i></div>
+                <span class="sd-load-chip-label">Major Axis Shear<br>Vux / Vax (kN)</span>
+              </div>
+              <input type="number" id="loadVux" class="sd-load-input" placeholder="0" value="0">
+            </div>
+            <div class="sd-load-chip" id="group-vuy">
+              <div class="sd-load-chip-header">
+                <div class="sd-load-chip-icon"><i class="fas fa-arrows-alt-h"></i></div>
+                <span class="sd-load-chip-label">Minor Axis Shear<br>Vuy / Vay (kN)</span>
+              </div>
+              <input type="number" id="loadVuy" class="sd-load-input" placeholder="0" value="0">
+            </div>
+            <div class="sd-load-chip" id="group-mux">
+              <div class="sd-load-chip-header">
+                <div class="sd-load-chip-icon"><i class="fas fa-sync-alt"></i></div>
+                <span class="sd-load-chip-label">Major Axis Moment<br>Mux / Max (kN-m)</span>
+              </div>
+              <input type="number" id="loadMux" class="sd-load-input" placeholder="0" value="0">
+            </div>
+            <div class="sd-load-chip" id="group-muy">
+              <div class="sd-load-chip-header">
+                <div class="sd-load-chip-icon"><i class="fas fa-sync-alt"></i></div>
+                <span class="sd-load-chip-label">Minor Axis Moment<br>Muy / May (kN-m)</span>
+              </div>
+              <input type="number" id="loadMuy" class="sd-load-input" placeholder="0" value="0">
+            </div>
+            <div class="sd-load-chip" id="group-tu">
+              <div class="sd-load-chip-header">
+                <div class="sd-load-chip-icon"><i class="fas fa-redo"></i></div>
+                <span class="sd-load-chip-label">Torsion<br>Tu / Ta (kN-m)</span>
+              </div>
+              <input type="number" id="loadTu" class="sd-load-input" placeholder="0" value="0">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 5: RESULTS -->
+      <div class="sd-step-panel" id="sd-panel-4">
+
+        <div class="sd-result-summary" id="resultKpiRow" style="display:none;">
+          <div class="sd-result-kpi">
+            <span class="sd-result-kpi-label">D/C Ratio</span>
+            <span class="sd-result-kpi-value kpi-neutral" id="kpiRatio">—</span>
+            <span class="sd-result-kpi-sub" id="kpiRatioSub">Not yet calculated</span>
+          </div>
+          <div class="sd-result-kpi">
+            <span class="sd-result-kpi-label">Status</span>
+            <span class="sd-result-kpi-value kpi-neutral" id="kpiStatus">—</span>
+            <span class="sd-result-kpi-sub" id="kpiStatusSub"></span>
+          </div>
+          <div class="sd-result-kpi">
+            <span class="sd-result-kpi-label">Governing Limit State</span>
+            <span class="sd-result-kpi-value kpi-neutral" id="kpiGovLS" style="font-size:0.95rem;"></span>
+            <span class="sd-result-kpi-sub" id="kpiCapacity"></span>
+          </div>
+        </div>
+
+        <div class="sd-result-tabs">
+          <button class="sd-result-tab-btn is-active" data-rtab="calcs" id="rtab-calcs">
+            <i class="fas fa-calculator"></i> Calculations
+          </button>
+          <button class="sd-result-tab-btn" data-rtab="rec" id="rtab-rec">
+            <i class="fas fa-th-list"></i> Recommend
+          </button>
+          <button class="sd-result-tab-btn" data-rtab="compare" id="rtab-compare">
+            <i class="fas fa-columns"></i> Compare
+          </button>
+          <button class="sd-result-tab-btn" data-rtab="report" id="rtab-report">
+            <i class="fas fa-file-pdf"></i> Report
+          </button>
+        </div>
+
+        <div class="sd-result-tab-panel is-active" id="rtab-panel-calcs">
+          <div id="capacitySection" style="display:block;">
+            <div id="capacityResults">
+              <div class="sd-empty-state">
+                <i class="fas fa-bolt"></i>
+                Click <strong>Check Capacity</strong> below to run the design check.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sd-result-tab-panel" id="rtab-panel-rec">
+          <div id="recommendationSection" style="display:block;">
+            <div class="sd-rec-filters">
+              <div class="sd-field">
+                <label class="sd-label">Section Family</label>
+                <select id="recSectionType" class="sd-select">
+                  <option value="all">All Appropriate</option>
+                  <option value="W">W-Shape</option>
+                  <option value="C">C-Shape</option>
+                  <option value="MC">MC-Shape</option>
+                  <option value="L">Angle (L)</option>
+                  <option value="HSS">HSS</option>
+                </select>
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Sort By</label>
+                <select id="recSortBy" class="sd-select">
+                  <option value="weight">Lowest Weight</option>
+                  <option value="area">Lowest Area</option>
+                  <option value="ratio">Lowest D/C Ratio</option>
+                  <option value="depth">Smallest Depth</option>
+                  <option value="designation">Section Designation</option>
+                </select>
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Max D/C Ratio</label>
+                <input type="number" id="recMaxRatio" class="sd-input" placeholder="1.0" value="1.0" step="0.05">
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Max Weight (kg/m)</label>
+                <input type="number" id="recMaxWeight" class="sd-input" placeholder="Optional">
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Max Depth (mm)</label>
+                <input type="number" id="recMaxDepth" class="sd-input" placeholder="Optional">
+              </div>
+              <div class="sd-field">
+                <label class="sd-label">Min Capacity (kN or kN-m)</label>
+                <input type="number" id="recMinCap" class="sd-input" placeholder="Optional">
+              </div>
+            </div>
+            <p class="sd-rec-note">
+              <i class="fas fa-info-circle" style="color:var(--amber);margin-right:5px;"></i>
+              Results are generated via automated screening. Engineering judgment is always required.
+              If Seismic / SMRF Design is enabled, only seismically compact sections will be shown.
+            </p>
+            <div style="margin-bottom:1rem;">
+              <button id="findSectionsBtn" class="sd-btn primary">
+                <i class="fas fa-search"></i> Find Suitable Sections
+              </button>
+            </div>
+            <div id="recommendationResults"></div>
+            <div style="margin-top:1rem;text-align:right;">
+              <button id="compareSelectedBtn" class="sd-btn" style="display:none;">
+                <i class="fas fa-columns"></i> Compare Selected
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sd-result-tab-panel" id="rtab-panel-compare">
+          <div id="comparisonSection" style="display:block;">
+            <div id="comparisonResults">
+              <div class="sd-empty-state">
+                <i class="fas fa-columns"></i>
+                Select sections in the Recommend tab then click Compare Selected.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sd-result-tab-panel" id="rtab-panel-report">
+          <div id="reportSection" style="display:block;">
+            <div style="text-align:center;padding:2rem;">
+              <p style="color:var(--mist);font-family:var(--font-m);margin-bottom:1.25rem;">Export a PDF report of this design check.</p>
+              <button id="exportPdfBtn" class="sd-btn primary">
+                <i class="fas fa-file-pdf"></i> Export PDF Report
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /step 4 -->
+
+    </div><!-- /sd-shell -->
+  </div><!-- /sd-page -->
+
+  <!-- Sticky Action Bar -->
+  <div class="sd-action-bar" id="sdActionBar">
+    <div class="sd-action-bar-left">
+      <button class="sd-btn ghost" id="sdPrevBtn" style="display:none;">
+        <i class="fas fa-chevron-left"></i> Back
+      </button>
+    </div>
+    <div class="sd-breadcrumb" id="sdBreadcrumb">
+      <span id="bcSection" style="display:none;"><strong id="bcSectionName">—</strong></span>
+      <span class="sep" id="bcSep1" style="display:none;">›</span>
+      <span id="bcMaterial" style="display:none;">A992</span>
+      <span class="sep" id="bcSep2" style="display:none;">›</span>
+      <span id="bcMethod" style="display:none;">LRFD</span>
+    </div>
+    <div class="sd-action-bar-right">
+      <button id="computeBtn" class="sd-btn primary" style="display:none;">
+        <i class="fas fa-bolt"></i> Check Capacity
+      </button>
+      <button class="sd-btn primary" id="sdNextBtn">
+        Next <i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Candidate Detail Modal -->
+  <div id="candidateDetailModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="candModalTitle">
+    <div class="modal-content">
+      <span class="close-btn" id="closeCandidateModal" title="Close">&times;</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--line,#333);padding-bottom:1rem;margin-bottom:1.5rem;padding-right:2rem;">
+        <h2 style="margin:0;font-size:1.4rem;">Candidate: <span id="candModalTitle" style="color:var(--amber,#f5a623);"></span></h2>
+        <button id="useCandSectionBtn" class="sd-btn success">
+          <i class="fas fa-check-circle"></i> Use This Section
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;margin-bottom:1.5rem;">
+        <div style="background:var(--steel,#12121c);padding:1.25rem;border-radius:10px;border:1px solid var(--line,#333);">
+          <h4 style="margin:0 0 0.75rem;color:var(--chalk);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--line,#333);padding-bottom:0.4rem;">
+            <i class="fas fa-cube" style="color:var(--amber);margin-right:6px;"></i>Section Properties
+          </h4>
+          <div id="candModalProps" style="font-size:0.88em;color:var(--text-light,#ccc);display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;"></div>
+        </div>
+        <div style="background:var(--steel,#12121c);padding:1.25rem;border-radius:10px;border:1px solid var(--line,#333);">
+          <h4 style="margin:0 0 0.75rem;color:var(--chalk);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--line,#333);padding-bottom:0.4rem;">
+            <i class="fas fa-chart-bar" style="color:var(--amber);margin-right:6px;"></i>Performance Summary
+          </h4>
+          <div id="candModalSummary" style="font-size:0.9em;color:var(--text-light,#ccc);"></div>
+        </div>
+        <div style="background:var(--steel,#12121c);padding:1.25rem;border-radius:10px;border:1px solid var(--line,#333);display:flex;flex-direction:column;">
+          <h4 style="margin:0 0 0.75rem;color:var(--chalk);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--line,#333);padding-bottom:0.4rem;">
+            <i class="fas fa-drafting-compass" style="color:var(--amber);margin-right:6px;"></i>Section Illustration
+          </h4>
+          <div id="candModalIllustration" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:180px;"></div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:1.25rem;padding-top:0.75rem;border-top:1px solid var(--line,#333);">
+        <button id="viewCandCalcsBtn" class="sd-btn">
+          <i class="fas fa-calculator"></i> Show Detailed Calculations
+        </button>
+      </div>
+      <div id="candidateCalcResults" style="display:none;margin-top:1rem;"></div>
+    </div>
+  </div>
+
+  <!-- Wizard Controller -->
+  <script>
+    var sdCurrentStep = 0;
+    var SD_TOTAL = 5;
+
+    function sdGoStep(delta) {
+      sdSetStep(Math.max(0, Math.min(SD_TOTAL - 1, sdCurrentStep + delta)));
+    }
+
+    function sdSetStep(idx) {
+      sdCurrentStep = idx;
+      document.querySelectorAll('.sd-step-btn').forEach(function(btn, i) {
+        btn.classList.toggle('is-active', i === idx);
+        btn.classList.toggle('is-complete', i < idx);
+      });
+      document.querySelectorAll('.sd-step-panel').forEach(function(panel, i) {
+        panel.classList.toggle('is-active', i === idx);
+      });
+      var prevBtn = document.getElementById('sdPrevBtn');
+      if (prevBtn) prevBtn.style.display = idx > 0 ? 'inline-flex' : 'none';
+      var nextBtn = document.getElementById('sdNextBtn');
+      var checkBtn = document.getElementById('computeBtn');
+      if (nextBtn) nextBtn.style.display = idx < SD_TOTAL - 1 ? 'inline-flex' : 'none';
+      if (checkBtn) checkBtn.style.display = (idx === 3 || idx === 4) ? 'inline-flex' : 'none';
+      updateSectionDetailsVisibility();
+      updateBreadcrumb();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    document.querySelectorAll('.sd-step-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { sdSetStep(Number(btn.dataset.step)); });
+    });
+
+    document.getElementById('sdPrevBtn').addEventListener('click', function() { sdGoStep(-1); });
+    document.getElementById('sdNextBtn').addEventListener('click', function() { sdGoStep(1); });
+
+    document.querySelectorAll('.sd-result-tab-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.sd-result-tab-btn').forEach(function(b) { b.classList.remove('is-active'); });
+        document.querySelectorAll('.sd-result-tab-panel').forEach(function(p) { p.classList.remove('is-active'); });
+        btn.classList.add('is-active');
+        var panel = document.getElementById('rtab-panel-' + btn.dataset.rtab);
+        if (panel) panel.classList.add('is-active');
+      });
+    });
+
+    function updateSectionDetailsVisibility() {
+      // The card is now always visible as part of the layout, displaying an empty state initially
+      return;
+    }
+
+    function updateBreadcrumb() {
+      var secEl = document.getElementById('bcSection');
+      var sep1 = document.getElementById('bcSep1');
+      var matEl = document.getElementById('bcMaterial');
+      var sep2 = document.getElementById('bcSep2');
+      var metEl = document.getElementById('bcMethod');
+      var nameEl = document.getElementById('bcSectionName');
+      if (!secEl) return;
+      var hasSec = window.designState && window.designState.selectedDesignation;
+      secEl.style.display = hasSec ? 'inline' : 'none';
+      sep1.style.display = hasSec ? 'inline' : 'none';
+      if (nameEl && hasSec) nameEl.textContent = window.designState.selectedDesignation;
+      var matGrade = document.getElementById('materialGrade');
+      var grade = matGrade ? matGrade.options[matGrade.selectedIndex].text.split(' ')[0] : 'A992';
+      if (matEl) { matEl.textContent = grade; matEl.style.display = 'inline'; }
+      if (sep2) sep2.style.display = 'inline';
+      var methEl = document.getElementById('designMethod');
+      var methVal = methEl ? methEl.value.toUpperCase() : 'LRFD';
+      if (metEl) { metEl.textContent = methVal; metEl.style.display = 'inline'; }
+    }
+
+    window.__sdUpdateKPIs = function(results) {
+      var kpiRow = document.getElementById('resultKpiRow');
+      var kpiRatio = document.getElementById('kpiRatio');
+      var kpiRatioSub = document.getElementById('kpiRatioSub');
+      var kpiStatus = document.getElementById('kpiStatus');
+      var kpiGovLS = document.getElementById('kpiGovLS');
+      var kpiCap = document.getElementById('kpiCapacity');
+      if (!kpiRow || !results) return;
+      var gs = results.globalSummary;
+      if (gs) {
+        kpiRow.style.display = 'grid';
+        kpiRatio.textContent = gs.ratio != null ? gs.ratio.toFixed(3) : '—';
+        kpiRatio.className = 'sd-result-kpi-value ' + (gs.status === 'PASS' ? 'kpi-pass' : 'kpi-fail');
+        kpiRatioSub.textContent = gs.status === 'PASS' ? '\u2264 1.0 \u2014 OK' : '> 1.0 \u2014 OVERSTRESSED';
+        kpiStatus.textContent = gs.status;
+        kpiStatus.className = 'sd-result-kpi-value ' + (gs.status === 'PASS' ? 'kpi-pass' : 'kpi-fail');
+        if (kpiGovLS) kpiGovLS.textContent = gs.limitState || '—';
+        if (kpiCap) kpiCap.textContent = gs.capacity ? 'Capacity: ' + gs.capacity : '';
+      }
+      sdSetStep(4);
+      document.querySelectorAll('.sd-result-tab-btn').forEach(function(b) { b.classList.remove('is-active'); });
+      document.querySelectorAll('.sd-result-tab-panel').forEach(function(p) { p.classList.remove('is-active'); });
+      document.getElementById('rtab-calcs').classList.add('is-active');
+      document.getElementById('rtab-panel-calcs').classList.add('is-active');
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var computeBtn = document.getElementById('computeBtn');
+      if (computeBtn) {
+        computeBtn.addEventListener('click', function() {
+          var obs = new MutationObserver(function() {
+            if (window.__lastDesignResults) {
+              window.__sdUpdateKPIs(window.__lastDesignResults);
+              obs.disconnect();
+            }
+          });
+          var capEl = document.getElementById('capacityResults');
+          if (capEl) obs.observe(capEl, { childList: true, subtree: true });
+          setTimeout(function() {
+            if (window.__lastDesignResults) window.__sdUpdateKPIs(window.__lastDesignResults);
+            obs.disconnect();
+          }, 3500);
+        });
+      }
+
+      var sl = document.getElementById('sectionsList');
+      if (sl) sl.addEventListener('click', function() { setTimeout(updateSectionDetailsVisibility, 150); });
+
+      var mg = document.getElementById('materialGrade');
+      if (mg) mg.addEventListener('change', updateBreadcrumb);
+      var dm = document.getElementById('designMethod');
+      if (dm) dm.addEventListener('change', updateBreadcrumb);
+
+      sdSetStep(0);
+      updateBreadcrumb();
+    });
+  </script>
+
+  <script type="module" src="js/steelDesign.js"></script>
+</body>
+</html>
