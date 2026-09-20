@@ -47,6 +47,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 3000);
   }
 
+  // Store sections in memory to prevent inspection access
+  const adminContainer = document.querySelector('.admin-container');
+  const storedSelectionSection = selectionSection;
+  const storedDashboardSection = dashboardSection;
+
   // Check auth status
   let user = await authService.getCurrentUser();
   
@@ -58,13 +63,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function showLogin() {
     loginSection.style.display = 'block';
-    dashboardSection.style.display = 'none';
+    if (selectionSection && selectionSection.parentNode) {
+      selectionSection.remove();
+    }
+    if (dashboardSection && dashboardSection.parentNode) {
+      dashboardSection.remove();
+    }
   }
 
   async function showDashboard() {
     loginSection.style.display = 'none';
-    if (selectionSection) selectionSection.style.display = 'block';
-    dashboardSection.style.display = 'none';
+    if (storedSelectionSection) {
+      adminContainer.appendChild(storedSelectionSection);
+      storedSelectionSection.style.display = 'block';
+    }
+    if (storedDashboardSection) {
+      adminContainer.appendChild(storedDashboardSection);
+      storedDashboardSection.style.display = 'none';
+    }
   }
 
   // --- Selection Actions ---

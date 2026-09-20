@@ -8,6 +8,13 @@ import { initMemberInputs } from './steel/memberInputs.js';
 import { runSteelDesign } from './steel/calculations/steelDesign.js';
 import { renderCalculationResults } from './steel/calculations/resultRenderer.js';
 import { initBuiltUpPanel } from './steel/builtUpUI.js';
+import { authService } from '../src/services/authService.js';
+
+authService.getCurrentUser().then(user => {
+  if (!user) {
+    window.location.href = '/admin.html';
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log("Steel Design Interface Loaded");

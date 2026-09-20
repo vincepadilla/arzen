@@ -7,6 +7,14 @@
  * endpoint and receives { leftRes, midRes, rightRes } in return.
  */
 
+import { authService } from './src/services/authService.js';
+
+authService.getCurrentUser().then(user => {
+  if (!user) {
+    window.location.href = '/admin.html';
+  }
+});
+
 
 // ---------- Set defaults ----------
 document.getElementById('projDate').value = new Date().toISOString().split('T')[0];
