@@ -16,7 +16,8 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         blogs: resolve(__dirname, 'blogs.html'),
         admin: resolve(__dirname, 'admin.html'),
-        computation: resolve(__dirname, 'computation.html')
+        computation: resolve(__dirname, 'computation.html'),
+        steelDesign: resolve(__dirname, 'steelDesign.html')
       }
     }
   }
