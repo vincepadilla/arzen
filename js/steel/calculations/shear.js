@@ -1,132 +1,459 @@
 // Shear capacity calculations (AISC 360 Chapter G)
-export function checkShear(state) {
-  const isLRFD = state.designMethod === 'lrfd';
-  
-  const fy = state.material.fy;
-  const E = state.material.E;
-  
-  const d = state.section.d || 0;
-  const tw = state.section.tw || 0;
-  const h_tw = state.section.h_tw || 0;
-  
-  const vux = state.loadVux || 0;
-  
-  // Web Area
-  const aw = d * tw;
-  
-  // Shear Coefficient Cv1
-  const limitCv1 = 2.24 * Math.sqrt(E / fy);
-  let cv1 = 1.0;
-  let cv1Formula = "\\( C_{v1} = 1.0 \\)";
-  let cv1Sub = `\\( h/t_w (${h_tw}) \\le 2.24\\sqrt{E/F_y} (${limitCv1.toFixed(2)}) \\)`;
-  let isSpecialCase = false;
-  
-  if (h_tw <= limitCv1) {
-    cv1 = 1.0;
-    isSpecialCase = true; // AISC G2.1(a) allows phi_v = 1.00
+
+function calculateShearCv({ lambda, kv, E, Fy }) {
+  const limit1 = 1.10 * Math.sqrt((kv * E) / Fy);
+  const limit2 = 1.37 * Math.sqrt((kv * E) / Fy);
+  let Cv = 1.0;
+  let region = 1;
+
+  if (lambda <= limit1) {
+    Cv = 1.0;
+    region = 1;
+  } else if (lambda <= limit2) {
+    Cv = limit1 / lambda;
+    region = 2;
   } else {
-    // Assuming kv = 5.0 for webs without transverse stiffeners
-    const limit2 = 1.10 * Math.sqrt((5 * E) / fy);
-    if (h_tw <= limit2) {
-       cv1 = 1.0;
-       cv1Sub = `\\( h/t_w (${h_tw}) \\le 1.10\\sqrt{5E/F_y} (${limit2.toFixed(2)}) \\)`;
-    } else {
-       cv1 = limit2 / h_tw;
-       cv1Formula = "\\( C_{v1} = \\frac{1.10\\sqrt{k_v E / F_y}}{h/t_w} \\)";
-       cv1Sub = `\\( C_{v1} = \\frac{${limit2.toFixed(2)}}{${h_tw}} \\)`;
-    }
+    Cv = (1.51 * kv * E) / (Math.pow(lambda, 2) * Fy);
+    region = 3;
   }
-  
-  // Resistance Factors (AISC G2.1a vs G2.1b)
-  const factor = isSpecialCase ? (isLRFD ? 1.00 : 1.50) : (isLRFD ? 0.90 : 1.67);
-  const factorSymbol = isLRFD ? "φv" : "Ωv";
-  
-  // Nominal Shear Strength
-  const vn_N = 0.6 * fy * aw * cv1;
-  const vn_kN = vn_N / 1000;
-  
+
+  return { Cv, limit1, limit2, region };
+}
+
+function invalidResult(limitState, missingProp) {
+  return {
+    limitState: limitState,
+    status: "INVALID",
+    ratio: { value: 999.999 },
+    designStrength: { value: 0 },
+    steps: [{
+      step: 1,
+      title: "Missing Property",
+      result: `SHEAR CHECK INVALID — MISSING PROPERTY: ${missingProp}`
+    }]
+  };
+}
+
+function buildResultObj(limitState, demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD, formula, sub) {
+  const vn_kN = Vn_N / 1000;
   const designStrength = isLRFD ? (vn_kN * factor) : (vn_kN / factor);
-  const ratioVal = designStrength > 0 ? (vux / designStrength) : (vux > 0 ? 999.999 : 0);
+  const ratioVal = designStrength > 0 ? (demand / designStrength) : (demand > 0 ? 999.999 : 0);
   const status = ratioVal <= 1.0 ? "PASS" : "FAIL";
 
-  const calcObj = {
-    limitState: "Major Axis Shear",
+  let cvFormulaStr = "\\( C_v = 1.0 \\)";
+  if (cvRes.region === 2) cvFormulaStr = "\\( C_v = \\frac{1.10\\sqrt{k_v E / F_y}}{h/t_w} \\)";
+  if (cvRes.region === 3) cvFormulaStr = "\\( C_v = \\frac{1.51 k_v E}{(h/t_w)^2 F_y} \\)";
+
+  return {
+    limitState: limitState,
     codeReference: {
-        standard: state.designCode === 'nscp2015-aisc360-10' ? "NSCP 2015 / AISC 360-10" : "AISC 360",
-        chapter: "G",
-        section: "G2",
-        limitState: "Major Axis Shear"
+        standard: "NSCP 2015 / AISC 360-10",
+        chapter: "G"
     },
-    formula: "\\( V_n = 0.6 F_y A_w C_{v1} \\)",
-    variables: {
-        Aw: { symbol: "\\( A_w \\)", value: aw, unit: "mm²" },
-        Cv1: { symbol: "\\( C_{v1} \\)", value: Number(cv1.toFixed(3)), unit: "" }
-    },
-    substitution: `\\( V_n = 0.6 \\times ${fy} \\times ${aw} \\times ${cv1.toFixed(2)} \\)`,
-    calculation: `Vn = ${vn_N.toLocaleString()} N`,
+    formula: formula || "\\( V_n = 0.6 F_y A_w C_v \\)",
+    substitution: sub || `\\( V_n = 0.6 \\times F_y \\times ${Aw.toFixed(2)} \\times ${cvRes.Cv.toFixed(3)} \\)`,
     result: { value: vn_kN, unit: "kN" },
-    resistanceFactor: { symbol: `\\( ${factorSymbol} \\)`, value: factor },
     designStrength: {
-        formula: isLRFD ? "\\( \\phi_v V_n \\)" : "\\( V_n / \\Omega_v \\)",
-        substitution: isLRFD ? `\\( ${factor.toFixed(2)} \\times ${vn_kN.toFixed(2)} \\)` : `\\( \\frac{${vn_kN.toFixed(2)}}{${factor.toFixed(2)}} \\)`,
-        value: Number(designStrength.toFixed(2)),
+        value: designStrength,
         unit: "kN"
     },
-    demand: { value: vux, unit: "kN" },
-    ratio: {
-        formula: isLRFD ? "\\( V_{ux} / \\phi_v V_n \\)" : "\\( V_{ax} / (V_n / \\Omega_v) \\)",
-        substitution: `\\( \\frac{${vux}}{${designStrength.toFixed(2)}} \\)`,
-        value: Number(ratioVal.toFixed(3))
-    },
+    demand: { value: demand, unit: "kN" },
+    ratio: { value: ratioVal },
     status: status,
     steps: [
-        {
-            step: 1,
-            title: "Web Dimensions & Area",
-            formula: "Aw = d × tw",
-            substitution: `Aw = ${d} × ${tw}`,
-            result: `${aw} mm²`,
-            unit: "mm²"
-        },
-        {
-            step: 2,
-            title: "Web Slenderness Check",
-            formula: cv1Formula,
-            substitution: cv1Sub,
-            result: `Cv1 = ${cv1.toFixed(3)}`,
-            unit: ""
-        },
-        {
-            step: 3,
-            title: "Nominal Shear Strength",
-            formula: "Vn = 0.6 × Fy × Aw × Cv1",
-            substitution: `Vn = 0.6 × ${fy} × ${aw} × ${cv1.toFixed(3)} / 1000`,
-            result: vn_kN.toFixed(2),
-            unit: "kN"
-        },
-        {
-            step: 4,
-            title: "Design Strength",
-            formula: isLRFD ? "φvVn = φv × Vn" : "Vn/Ωv = Vn / Ωv",
-            substitution: isLRFD ? `${factor.toFixed(2)} × ${vn_kN.toFixed(2)}` : `${vn_kN.toFixed(2)} / ${factor.toFixed(2)}`,
-            result: designStrength.toFixed(2),
-            unit: "kN"
-        },
-        {
-            step: 5,
-            title: "Demand / Capacity Ratio",
-            formula: isLRFD ? "D/C = Vux / φvVn" : "D/C = Vax / (Vn/Ωv)",
-            substitution: `${vux} / ${designStrength.toFixed(2)}`,
-            result: ratioVal.toFixed(3),
-            unit: ""
-        }
+        { step: 1, title: "Shear Area", result: `${Aw.toFixed(2)} mm²` },
+        { step: 2, title: "Slenderness", result: `${lambda.toFixed(2)}` },
+        { step: 3, title: "Shear Buckling Coefficient", formula: cvFormulaStr, result: `Cv = ${cvRes.Cv.toFixed(3)} (Region ${cvRes.region})` },
+        { step: 4, title: "Nominal Shear Strength Vn", result: `${vn_kN.toFixed(2)} kN` },
+        { step: 5, title: "Design Strength", formula: `${factorSymbol}Vn`, result: `${designStrength.toFixed(2)} kN` },
+        { step: 6, title: "DCR", result: ratioVal.toFixed(3) }
     ]
   };
+}
 
-  return { 
-    majorAxisShear: calcObj,
-    governingCapacity: designStrength,
-    governingRatio: ratioVal,
-    passed: status === "PASS"
+function calcIShapeMajor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.d) return invalidResult("Major Axis Shear", "d");
+  if (!sec.tw) return invalidResult("Major Axis Shear", "tw");
+
+  const d = sec.d;
+  const tw = sec.tw;
+  const h = sec.h || (d - 2 * (sec.tf || 0)); // fallback
+  if (h <= 0) return invalidResult("Major Axis Shear", "h");
+
+  const Aw = d * tw;
+  const lambda = h / tw;
+  const kv = 5.0; // Unstiffened web
+
+  // AISC G2.1(a) special provision for rolled I-shapes
+  const isRolled = !sec.isBuiltUp;
+  const limitG21a = 2.24 * Math.sqrt(E / Fy);
+  
+  let factor = isLRFD ? 0.90 : 1.67;
+  let factorSymbol = isLRFD ? "φv" : "Ωv";
+  let cvRes = calculateShearCv({ lambda, kv, E, Fy });
+
+  if (isRolled && lambda <= limitG21a) {
+    factor = isLRFD ? 1.00 : 1.50;
+    cvRes.Cv = 1.0;
+    cvRes.region = 1;
+  }
+
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  return buildResultObj("Major Axis Shear (G2)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcIShapeMinor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.bf) return invalidResult("Minor Axis Shear", "bf");
+  if (!sec.tf) return invalidResult("Minor Axis Shear", "tf");
+
+  const bf = sec.bf;
+  const tf = sec.tf;
+  
+  const Aw = 2 * bf * tf;
+  const lambda = bf / (2 * tf);
+  const kv = 1.2; // Weak axis shear typical assumption for flanges without stiffeners
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Minor Axis Shear (G6)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcChannelMajor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.d) return invalidResult("Major Axis Shear", "d");
+  if (!sec.tw) return invalidResult("Major Axis Shear", "tw");
+
+  const d = sec.d;
+  const tw = sec.tw;
+  const h = sec.h || (d - 2 * (sec.tf || 0));
+  
+  const Aw = d * tw;
+  const lambda = h / tw;
+  const kv = 5.0;
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Major Axis Shear (G2)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcChannelMinor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.bf) return invalidResult("Minor Axis Shear", "bf");
+  if (!sec.tf) return invalidResult("Minor Axis Shear", "tf");
+
+  const Aw = 2 * sec.bf * sec.tf;
+  const lambda = sec.bf / sec.tf;
+  const kv = 1.2;
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Minor Axis Shear (G6)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcTeeMajor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.d) return invalidResult("Major Axis Shear", "d");
+  if (!sec.tw) return invalidResult("Major Axis Shear", "tw");
+  if (!sec.tf) return invalidResult("Major Axis Shear", "tf");
+
+  const d = sec.d;
+  const tw = sec.tw;
+  const tf = sec.tf;
+  const stemDepth = d - tf;
+  
+  const Aw = d * tw; // G4 states Aw = d * tw for tees
+  const lambda = stemDepth / tw;
+  const kv = 1.2; // AISC G4
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Major Axis Shear (G4)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcTeeMinor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.bf) return invalidResult("Minor Axis Shear", "bf");
+  if (!sec.tf) return invalidResult("Minor Axis Shear", "tf");
+
+  const Aw = sec.bf * sec.tf;
+  const lambda = sec.bf / (2 * sec.tf);
+  const kv = 1.2;
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Minor Axis Shear (G6)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcAngleMajor(sec, E, Fy, isLRFD, demand) {
+  // Assume Major Axis shear is along the vertical leg (d)
+  if (!sec.d) return invalidResult("Major Axis Shear", "d");
+  if (!sec.t && !sec.tw) return invalidResult("Major Axis Shear", "t");
+
+  const t = sec.t || sec.tw;
+  const d = sec.d;
+  
+  const Aw = d * t;
+  const lambda = d / t;
+  const kv = 1.2; // AISC G4
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Major Axis Shear (G4)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcAngleMinor(sec, E, Fy, isLRFD, demand) {
+  // Assume Minor Axis shear is along the horizontal leg (b)
+  if (!sec.b && !sec.bf) return invalidResult("Minor Axis Shear", "b");
+  if (!sec.t && !sec.tw) return invalidResult("Minor Axis Shear", "t");
+
+  const t = sec.t || sec.tw;
+  const b = sec.b || sec.bf;
+  
+  const Aw = b * t;
+  const lambda = b / t;
+  const kv = 1.2; // AISC G4
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Minor Axis Shear (G4)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcDoubleAngleMajor(sec, E, Fy, isLRFD, demand) {
+  // Along the two vertical legs
+  if (!sec.d) return invalidResult("Major Axis Shear", "d");
+  if (!sec.t && !sec.tw) return invalidResult("Major Axis Shear", "t");
+
+  const t = sec.t || sec.tw;
+  const d = sec.d;
+  
+  const Aw = 2 * (d * t);
+  const lambda = d / t;
+  const kv = 1.2;
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Major Axis Shear (G4)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcDoubleAngleMinor(sec, E, Fy, isLRFD, demand) {
+  // Along the two horizontal legs
+  if (!sec.b && !sec.bf) return invalidResult("Minor Axis Shear", "b");
+  if (!sec.t && !sec.tw) return invalidResult("Minor Axis Shear", "t");
+
+  const t = sec.t || sec.tw;
+  let b = sec.b || sec.bf;
+  if (sec.isBuiltUp) {
+     b = (sec.b || sec.bf || 0); // single leg width
+  } else {
+     // DB double angle might have bf as total width including gap, 
+     // or just single leg b. Usually b is single leg.
+     if (!sec.b) b = sec.bf;
+  }
+  
+  const Aw = 2 * (b * t);
+  const lambda = b / t;
+  const kv = 1.2;
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Minor Axis Shear (G4)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcHSSMajor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.H && !sec.d) return invalidResult("Major Axis Shear", "H");
+  if (!sec.tdes && !sec.t && !sec.tw) return invalidResult("Major Axis Shear", "t");
+
+  const H = sec.H || sec.d;
+  const t = sec.tdes || sec.t || sec.tw;
+  const h = H - 3 * t; // AISC B4.1b clear distance
+  
+  const Aw = 2 * H * t; // G5
+  const lambda = h / t;
+  const kv = 5.0; // G5
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Major Axis Shear (G5)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcHSSMinor(sec, E, Fy, isLRFD, demand) {
+  if (!sec.B && !sec.b && !sec.bf) return invalidResult("Minor Axis Shear", "B");
+  if (!sec.tdes && !sec.t && !sec.tw) return invalidResult("Minor Axis Shear", "t");
+
+  const B = sec.B || sec.b || sec.bf;
+  const t = sec.tdes || sec.t || sec.tw;
+  const b = B - 3 * t; // clear distance
+  
+  const Aw = 2 * B * t;
+  const lambda = b / t;
+  const kv = 5.0;
+
+  const cvRes = calculateShearCv({ lambda, kv, E, Fy });
+  const Vn_N = 0.6 * Fy * Aw * cvRes.Cv;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  return buildResultObj("Minor Axis Shear (G5)", demand, Aw, lambda, kv, cvRes, Vn_N, factor, factorSymbol, isLRFD);
+}
+
+function calcRoundHSS(sec, E, Fy, isLRFD, demand, Lv) {
+  const D = sec.OD || sec.d || sec.H;
+  const t = sec.tdes || sec.t || sec.tw;
+
+  if (!D) return invalidResult("Shear", "OD");
+  if (!t) return invalidResult("Shear", "t");
+
+  const Ag = Math.PI * (Math.pow(D, 2) - Math.pow(D - 2*t, 2)) / 4;
+  const Aw = Ag / 2; // G6
+  
+  const Lv_D = Lv / D;
+  const D_t = D / t;
+
+  let Fcr1 = 1.60 * E / (Math.sqrt(Lv_D) * Math.pow(D_t, 1.25));
+  let Fcr2 = 0.78 * E / Math.pow(D_t, 1.5);
+  
+  let Fcr = Math.max(Fcr1, Fcr2);
+  if (Fcr > 0.6 * Fy) {
+    Fcr = 0.6 * Fy;
+  }
+
+  const Vn_N = Fcr * Aw;
+  const factor = isLRFD ? 0.90 : 1.67;
+  const factorSymbol = isLRFD ? "φv" : "Ωv";
+
+  const vn_kN = Vn_N / 1000;
+  const designStrength = isLRFD ? (vn_kN * factor) : (vn_kN / factor);
+  const ratioVal = designStrength > 0 ? (demand / designStrength) : (demand > 0 ? 999.999 : 0);
+  const status = ratioVal <= 1.0 ? "PASS" : "FAIL";
+
+  return {
+    limitState: "Shear (G6)",
+    codeReference: {
+        standard: "NSCP 2015 / AISC 360-10",
+        chapter: "G"
+    },
+    formula: "\\( V_n = F_{cr} A_g / 2 \\)",
+    substitution: `\\( V_n = ${Fcr.toFixed(2)} \\times ${Aw.toFixed(2)} \\)`,
+    result: { value: vn_kN, unit: "kN" },
+    designStrength: {
+        value: designStrength,
+        unit: "kN"
+    },
+    demand: { value: demand, unit: "kN" },
+    ratio: { value: ratioVal },
+    status: status,
+    steps: [
+        { step: 1, title: "Slenderness", result: `D/t = ${D_t.toFixed(2)}, Lv/D = ${Lv_D.toFixed(2)}` },
+        { step: 2, title: "Critical Stress Fcr", result: `${Fcr.toFixed(2)} MPa` },
+        { step: 3, title: "Nominal Shear Strength Vn", result: `${vn_kN.toFixed(2)} kN` },
+        { step: 4, title: "Design Strength", formula: `${factorSymbol}Vn`, result: `${designStrength.toFixed(2)} kN` },
+        { step: 5, title: "DCR", result: ratioVal.toFixed(3) }
+    ]
+  };
+}
+
+export function checkShear(state) {
+  const isLRFD = state.designMethod === 'lrfd';
+  const fy = state.material.fy;
+  const E = state.material.E;
+  const vux = Math.abs(state.loadVux || 0); // major-axis shear
+  const vuy = Math.abs(state.loadVuy || 0); // minor-axis shear
+  const lv = state.loadLv || state.memberLength || 1000; // avoid 0
+  
+  const sec = state.section;
+  
+  let family = sec.isBuiltUp ? sec.builtUpType : (sec.type || (sec.designation ? sec.designation.split(/[^a-zA-Z]/)[0] : 'I-SECTION'));
+  
+  const getCanonicalType = (t) => {
+    if (['W', 'M', 'HP', 'S', 'I-SECTION', 'PLATE-GIRDER'].includes(t)) return 'I';
+    if (['C', 'MC', 'BU-CHANNEL', 'CHANNEL'].includes(t)) return 'C';
+    if (['L', 'SINGLE-ANGLE'].includes(t)) return 'L';
+    if (['2L', 'DOUBLE_ANGLE', 'Double Angle', 'DOUBLE-ANGLE'].includes(t)) return '2L';
+    if (['WT', 'MT', 'ST', 'BU-TEE', 'TEE'].includes(t)) return 'T';
+    if (['HSS', 'BOX', 'SQUARE-HSS', 'RECT-HSS'].includes(t)) return 'HSS';
+    if (['ROUND-HSS', 'PIPE'].includes(t) || sec.OD) return 'ROUND-HSS';
+    return 'I';
+  };
+
+  const canonical = getCanonicalType(family);
+  let majorAxisShear = null;
+  let minorAxisShear = null;
+
+  if (canonical === 'I') {
+     majorAxisShear = calcIShapeMajor(sec, E, fy, isLRFD, vux);
+     minorAxisShear = calcIShapeMinor(sec, E, fy, isLRFD, vuy);
+  } else if (canonical === 'C') {
+     majorAxisShear = calcChannelMajor(sec, E, fy, isLRFD, vux);
+     minorAxisShear = calcChannelMinor(sec, E, fy, isLRFD, vuy);
+  } else if (canonical === 'T') {
+     majorAxisShear = calcTeeMajor(sec, E, fy, isLRFD, vux);
+     minorAxisShear = calcTeeMinor(sec, E, fy, isLRFD, vuy);
+  } else if (canonical === 'L') {
+     majorAxisShear = calcAngleMajor(sec, E, fy, isLRFD, vux);
+     minorAxisShear = calcAngleMinor(sec, E, fy, isLRFD, vuy);
+  } else if (canonical === '2L') {
+     majorAxisShear = calcDoubleAngleMajor(sec, E, fy, isLRFD, vux);
+     minorAxisShear = calcDoubleAngleMinor(sec, E, fy, isLRFD, vuy);
+  } else if (canonical === 'HSS') {
+     majorAxisShear = calcHSSMajor(sec, E, fy, isLRFD, vux);
+     minorAxisShear = calcHSSMinor(sec, E, fy, isLRFD, vuy);
+  } else if (canonical === 'ROUND-HSS') {
+     majorAxisShear = calcRoundHSS(sec, E, fy, isLRFD, vux, lv);
+     minorAxisShear = calcRoundHSS(sec, E, fy, isLRFD, vuy, lv);
+  }
+
+  let governingRatio = 0;
+  let governingCapacity = 0;
+  let hasFailed = false;
+
+  if (majorAxisShear && majorAxisShear.ratio) {
+     if (majorAxisShear.ratio.value > governingRatio) {
+        governingRatio = majorAxisShear.ratio.value;
+        governingCapacity = majorAxisShear.designStrength.value;
+     }
+     if (majorAxisShear.status === "FAIL" || majorAxisShear.status === "INVALID") hasFailed = true;
+  }
+  
+  if (minorAxisShear && minorAxisShear.ratio) {
+     if (minorAxisShear.ratio.value > governingRatio) {
+        governingRatio = minorAxisShear.ratio.value;
+        governingCapacity = minorAxisShear.designStrength.value;
+     }
+     if (minorAxisShear.status === "FAIL" || minorAxisShear.status === "INVALID") hasFailed = true;
+  }
+
+  return {
+     majorAxisShear,
+     minorAxisShear,
+     governingCapacity,
+     governingRatio,
+     passed: !hasFailed && governingRatio <= 1.0
   };
 }

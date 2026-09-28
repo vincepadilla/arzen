@@ -7,8 +7,10 @@ import { checkValidField } from './steel/validation.js';
 import { initMemberInputs } from './steel/memberInputs.js';
 import { runSteelDesign } from './steel/calculations/steelDesign.js';
 import { renderCalculationResults } from './steel/calculations/resultRenderer.js';
+import { renderDesignResults } from './steel/designResultRenderer.js';
 import { initBuiltUpPanel } from './steel/builtUpUI.js';
 import { authService } from '../src/services/authService.js';
+import { designMember } from './steel/designOptimizer.js';
 
 authService.getCurrentUser().then(user => {
   if (!user) {
@@ -36,9 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentDesignation = null;
   let currentBuiltUpSection = null; // Holds computed built-up section when active
-
-  // W-family types that enable the Built-Up option
-  const W_FAMILIES = ['W', 'M', 'HP', 'S'];
+  let sectionSource = 'STANDARD';
+  let calculationMode = 'CHECK';
 
   initMemberInputs();
 
@@ -48,61 +49,106 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMaterialUI();
   }
 
-  // ─── Trigger bar elements ─────────────────────────────────────────────────
-  const builtUpTriggerBar = document.getElementById('builtUpTriggerBar');
-  const builtUpPanel      = document.getElementById('builtUpPanel');
-  const createBuiltUpBtn  = document.getElementById('createBuiltUpBtn');
-
   function showBuiltUpTrigger(show) {
-    if (builtUpTriggerBar) builtUpTriggerBar.style.display = show ? 'block' : 'none';
-    if (!show && builtUpPanel) {
-      builtUpPanel.style.display = 'none';
-      builtUpPanel.innerHTML = '';
+    if (builtUpPanel) {
+      builtUpPanel.style.display = show ? 'block' : 'none';
+      if (!show) {
+        builtUpPanel.innerHTML = '';
+      }
     }
   }
 
-  if (createBuiltUpBtn) {
-    createBuiltUpBtn.addEventListener('click', () => {
-      if (!builtUpPanel) return;
+  // Handle radio change
+  document.querySelectorAll('input[name="sectionSource"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      sectionSource = e.target.value;
+      if (calculationMode === 'DESIGN') return; // Handled separately
+      
+      const typeSelectField = document.getElementById('shapeFamilyContainer');
+      const filterSidebar = document.querySelector('.sd-filter-sidebar');
+      const listWrap = document.querySelector('.sd-section-list-wrap');
+      
+      if (sectionSource === 'CUSTOM') {
+        if (filterSidebar) filterSidebar.style.display = 'none';
+        if (listWrap) listWrap.style.display = 'none';
+        
+        // Ensure type select is still visible somewhere if we hid the sidebar. 
+        // We will move it out or just hide the other filters.
+        Array.from(filterSidebar.children).forEach(child => {
+           if (child.id !== 'shapeFamilyContainer' && !child.querySelector('input[name="sectionSource"]') && !child.querySelector('input[name="calcMode"]')) {
+              child.style.display = 'none';
+           }
+        });
+        filterSidebar.style.display = 'block';
 
-      // Toggle panel
-      if (builtUpPanel.style.display === 'block') {
-        builtUpPanel.style.display = 'none';
-        createBuiltUpBtn.innerHTML = '<i class="fas fa-drafting-compass"></i> Create Built-Up Section';
-        return;
+        showBuiltUpTrigger(true);
+        // Initialize Built-up UI based on current shape family
+        const seedSection = currentDesignation
+          ? steelDatabase.find(s => s.designation === currentDesignation)
+          : null;
+        
+        const typeSelect = document.getElementById('sectionType');
+        if (typeSelect) {
+           initBuiltUpPanel(builtUpPanel, onBuiltUpApply, seedSection, typeSelect.value);
+        } else {
+           initBuiltUpPanel(builtUpPanel, onBuiltUpApply, seedSection);
+        }
+
+      } else {
+        if (filterSidebar) {
+           Array.from(filterSidebar.children).forEach(child => {
+              child.style.display = 'block';
+           });
+        }
+        if (listWrap) listWrap.style.display = 'block';
+        showBuiltUpTrigger(false);
       }
-
-      builtUpPanel.style.display = 'block';
-      createBuiltUpBtn.innerHTML = '<i class="fas fa-times"></i> Close Designer';
-
-      // Seed dimensions from current W section if one is selected
-      const seedSection = currentDesignation
-        ? steelDatabase.find(s => s.designation === currentDesignation)
-        : null;
-
-      initBuiltUpPanel(builtUpPanel, onBuiltUpApply, seedSection);
-      builtUpPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-  }
+  });
+
+  document.querySelectorAll('input[name="calcMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      calculationMode = e.target.value;
+      
+      const listWrap = document.querySelector('.sd-section-list-wrap');
+      const filterSidebar = document.querySelector('.sd-filter-sidebar');
+      const searchDesig = document.getElementById('searchDesignation')?.parentNode;
+      const computeBtnLabel = document.getElementById('computeBtnLabel');
+      const builtUpTriggers = document.getElementById('builtUpTriggerBar');
+      const builtUpForm = document.getElementById('builtUpPanel');
+
+      const sectionLibraryCard = document.getElementById('sectionLibraryCard');
+      const sectionDetailsCard = document.getElementById('sectionDetailsCard');
+
+      if (calculationMode === 'DESIGN') {
+        if (sectionLibraryCard) sectionLibraryCard.style.display = 'none';
+        if (sectionDetailsCard) sectionDetailsCard.style.display = 'none';
+        
+        if (sectionSource === 'CUSTOM') {
+          alert('Automatic economic design currently searches standard database sections. Use Capacity Check for custom/built-up dimensions.');
+          // Revert to Standard
+          document.querySelector('input[name="sectionSource"][value="STANDARD"]').checked = true;
+          sectionSource = 'STANDARD';
+        }
+        
+        if (computeBtnLabel) computeBtnLabel.textContent = 'Design Member';
+      } else {
+        if (sectionLibraryCard) sectionLibraryCard.style.display = 'block';
+        if (sectionDetailsCard) sectionDetailsCard.style.display = 'block';
+        if (computeBtnLabel) computeBtnLabel.textContent = 'Check Capacity';
+        
+        // Trigger section source change to reset visibility appropriately within the Section Library
+        document.querySelector('input[name="sectionSource"]:checked').dispatchEvent(new Event('change'));
+      }
+    });
+  });
 
   function onBuiltUpApply(sectionObj) {
     currentBuiltUpSection = sectionObj;
-    currentDesignation    = null; // decouple from DB
 
     // Update the Section Details card
     updateProperties(sectionObj, propertiesContainer);
     updateIllustration(sectionObj, illustrationContainer);
-
-    // Show a confirmation banner inside the trigger bar
-    if (builtUpTriggerBar) {
-      const info = builtUpTriggerBar.querySelector('div');
-      if (info) info.innerHTML = `
-        <i class="fas fa-check-circle" style="color:#2ecc71; margin-right:5px;"></i>
-        Built-up section <strong style="color:var(--chalk,#eee);">${sectionObj.designation}</strong> applied.
-        Area = ${sectionObj.area} mm², Weight = ${sectionObj.weight} kg/m.
-        <span style="opacity:0.6; margin-left:8px;">Run design check below.</span>
-      `;
-    }
 
     // Scroll to top (section 1 content is shown inline in step panel)
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -110,19 +156,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleSelect(designation) {
     currentDesignation    = designation;
-    currentBuiltUpSection = null; // clear any previously applied built-up section
-
-    const data = steelDatabase.find(s => s.designation === designation);
-    updateProperties(data, propertiesContainer);
-    updateIllustration(data, illustrationContainer);
-
-    // Show trigger bar only for W-family sections
-    const isWFamily = data && W_FAMILIES.includes(data.type);
-    showBuiltUpTrigger(isWFamily);
-
-    // Reset create button label
-    if (createBuiltUpBtn) {
-      createBuiltUpBtn.innerHTML = '<i class="fas fa-drafting-compass"></i> Create Built-Up Section';
+    
+    if (sectionSource !== 'CUSTOM') {
+      const data = steelDatabase.find(s => s.designation === designation);
+      updateProperties(data, propertiesContainer);
+      updateIllustration(data, illustrationContainer);
     }
   }
 
@@ -160,7 +198,15 @@ document.addEventListener('DOMContentLoaded', () => {
   filterInputs.forEach(el => {
     if (el) {
       el.addEventListener('input', applyFilters);
-      el.addEventListener('change', applyFilters);
+      el.addEventListener('change', (e) => {
+         applyFilters();
+         if (e.target.id === 'sectionType' && sectionSource === 'CUSTOM') {
+            const seedSection = currentDesignation
+              ? steelDatabase.find(s => s.designation === currentDesignation)
+              : null;
+            initBuiltUpPanel(builtUpPanel, onBuiltUpApply, seedSection, e.target.value);
+         }
+      });
     }
   });
 
@@ -176,12 +222,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const capacityResults = document.getElementById('capacityResults');
   const recommendationResults = document.getElementById('recommendationResults');
 
+  // Seismic UI Toggle
+  const seismicToggle = document.getElementById('seismicToggle');
+  const seismicStatusLbl = document.getElementById('seismicStatusLbl');
+  const seismicDuctilityReqContainer = document.getElementById('seismicDuctilityReqContainer');
+  if (seismicToggle) {
+     seismicToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+           seismicStatusLbl.textContent = 'ON';
+           seismicStatusLbl.style.color = '#2ecc71';
+           if (calculationMode === 'DESIGN' && seismicDuctilityReqContainer) {
+              seismicDuctilityReqContainer.style.display = 'block';
+           }
+        } else {
+           seismicStatusLbl.textContent = 'OFF';
+           seismicStatusLbl.style.color = 'var(--mist)';
+           if (seismicDuctilityReqContainer) {
+              seismicDuctilityReqContainer.style.display = 'none';
+           }
+        }
+     });
+  }
+
   if (computeBtn) {
     computeBtn.addEventListener('click', () => {
-      // ── 1. Section guard ──────────────────────────────────────────────────
-      if (!currentDesignation && !currentBuiltUpSection) {
-        alert("Please select a steel section from the Available Sections list, or apply a built-up section first.");
-        return;
+      // ── 1. Section guard (only if checking capacity) ───────────────────────
+      let activeSection = null;
+      if (calculationMode === 'CHECK') {
+        activeSection = sectionSource === 'CUSTOM'
+          ? currentBuiltUpSection
+          : (currentDesignation ? steelDatabase.find(s => s.designation === currentDesignation) : null);
+
+        if (!activeSection) {
+          alert("Please select a standard section or apply a custom built-up section first.");
+          return;
+        }
       }
 
       // ── 2. Field validation ───────────────────────────────────────────────
@@ -219,18 +294,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const selectedMethod = document.getElementById('designMethod').value;
       const selectedCode   = document.getElementById('designCode').value;
 
-      const dbSection = currentDesignation
-        ? steelDatabase.find(s => s.designation === currentDesignation)
-        : null;
-      const resolvedSection = currentBuiltUpSection || dbSection;
-
-      if (!resolvedSection) {
-        alert("Section data not found. Please re-select a section.");
-        return;
-      }
-
       designState.memberType        = document.getElementById('memberType').value;
-      designState.section           = resolvedSection;
+      if (calculationMode === 'CHECK') {
+        designState.section = activeSection;
+      }
       designState.material          = {
         grade: document.getElementById('materialGrade').value,
         fy:    getVal('fy'),
@@ -250,9 +317,11 @@ document.addEventListener('DOMContentLoaded', () => {
       designState.Ky                = getVal('kyFactor');
       designState.Kz                = getVal('kzFactor');
       designState.Cb                = getVal('cbFactor');
-      designState.loadPu            = getVal('loadPu')  || 0;
+      designState.loadPc            = getVal('loadPc')  || 0;
+      designState.loadPt            = getVal('loadPt')  || 0;
       designState.loadVux           = getVal('loadVux') || 0;
       designState.loadVuy           = getVal('loadVuy') || 0;
+      designState.loadLv            = getVal('loadLv') || getVal('memberLength') || 0;
       designState.loadMux           = getVal('loadMux') || 0;
       designState.loadMuy           = getVal('loadMuy') || 0;
       designState.loadTu            = getVal('loadTu')  || 0;
@@ -271,18 +340,30 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       console.log("[Check Capacity] Design state:", designState);
+      
+      if (calculationMode === 'DESIGN') {
+        const hasLoads = designState.loadPc > 0 || designState.loadPt > 0 || 
+                         designState.loadVux > 0 || designState.loadVuy > 0 || 
+                         Math.abs(designState.loadMux) > 0 || Math.abs(designState.loadMuy) > 0 || 
+                         Math.abs(designState.loadTu) > 0;
+                         
+        if (!hasLoads) {
+          alert("Please input at least one non-zero design load for Member Design optimization.");
+          return;
+        }
+      }
 
       // ── 4. Show loading state ─────────────────────────────────────────────
       // capacitySection, recommendationSection, reportSection are inside tabs
       // in the new UI — no need to toggle display here.
 
-      const secLabel = resolvedSection.designation || 'Built-Up Section';
+      const secLabel = calculationMode === 'CHECK' ? (activeSection.designation || 'Built-Up Section') : 'Design Optimization';
       const methodLabel = selectedMethod.toUpperCase();
 
       capacityResults.innerHTML = `
         <div style="text-align:center; padding:2rem; color:var(--mist,#999);">
           <i class="fas fa-spinner fa-spin" style="font-size:2rem; margin-bottom:1rem; display:block;"></i>
-          Running capacity checks for <strong style="color:var(--chalk,#eee);">${secLabel}</strong>…
+          Running ${calculationMode === 'DESIGN' ? 'design optimization' : 'capacity checks'} for <strong style="color:var(--chalk,#eee);">${secLabel}</strong>…
         </div>
       `;
       // Navigate to results tab while loading
@@ -291,43 +372,80 @@ document.addEventListener('DOMContentLoaded', () => {
       // ── 5. Run real calculations (deferred to allow repaint) ──────────────
       setTimeout(() => {
         try {
-          const results = runSteelDesign(designState);
+          if (calculationMode === 'CHECK') {
+            const results = runSteelDesign(designState);
 
-          if (!results.globalSummary) {
-            capacityResults.innerHTML = `
-              <div style="padding:1.5rem; background:rgba(231,76,60,0.1); border:1px solid rgba(231,76,60,0.4);
-                          border-radius:8px; color:#e74c3c; text-align:center;">
-                <i class="fas fa-exclamation-triangle" style="margin-right:8px;"></i>
-                No limit states were triggered for member type
-                <strong>${designState.memberType}</strong> with the given loads.
-                Verify that non-zero loads are applied for the applicable member type.
-              </div>
-            `;
-            return;
+            if (!results.globalSummary) {
+              capacityResults.innerHTML = `
+                <div style="padding:1.5rem; background:rgba(231,76,60,0.1); border:1px solid rgba(231,76,60,0.4);
+                            border-radius:8px; color:#e74c3c; text-align:center;">
+                  <i class="fas fa-exclamation-triangle" style="margin-right:8px;"></i>
+                  No limit states were triggered for member type
+                  <strong>${designState.memberType}</strong> with the given loads.
+                  Verify that non-zero loads are applied for the applicable member type.
+                </div>
+              `;
+              return;
+            }
+
+            // Build header banner summarising inputs used
+            const inputSummary = buildInputSummaryHTML(designState, activeSection, selectedCode, methodLabel);
+
+            // Render the full step-by-step calculation trace
+            renderCalculationResults(results, 'capacityResults');
+
+            // Prepend input summary ahead of calculations
+            capacityResults.insertAdjacentHTML('afterbegin', inputSummary);
+
+            // Store results globally so the wizard KPI bar can read them
+            window.__lastDesignResults = results;
+
+            // Update wizard KPI summary row and navigate to results tab
+            if (typeof window.__sdUpdateKPIs === 'function') {
+              window.__sdUpdateKPIs(results);
+            }
+
+            // Trigger MathJax if loaded
+            if (window.MathJax) {
+              MathJax.typesetPromise([capacityResults]).catch(err => console.warn('MathJax:', err));
+            }
+          } else {
+             // DESIGN MODE
+             const familyMap = {
+                'w-shape': 'W', 'wt-shape': 'WT', 'c-shape': 'C', 'angle': 'L', 'double-angle': '2L', 'hss-rect': 'HSS', 'hss-round': 'ROUND-HSS'
+             };
+             const familyVal = document.getElementById('sectionType').value;
+             let searchFamily = familyMap[familyVal] || null;
+             
+             let dbSubset = steelDatabase;
+             if (searchFamily) {
+                dbSubset = steelDatabase.filter(s => s.type === searchFamily);
+             } else if (familyVal !== 'all') {
+                dbSubset = steelDatabase.filter(s => s.type === familyVal);
+             }
+             
+             // Enforce that a non-empty subset is available
+             if (dbSubset.length === 0) {
+                 capacityResults.innerHTML = `
+                  <div style="padding:1.5rem; background:rgba(231,76,60,0.1); border:1px solid rgba(231,76,60,0.4);
+                              border-radius:8px; color:#e74c3c; text-align:center;">
+                    <i class="fas fa-exclamation-triangle" style="margin-right:8px;"></i>
+                    No sections found for the specified family.
+                  </div>
+                `;
+                return;
+             }
+             
+             const optimizerRes = designMember({
+                family: familyVal,
+                sections: dbSubset,
+                designState: designState,
+                economicMetric: 'weight',
+                isSeismic: designState.seismicEnabled
+             });
+
+             renderDesignResults(optimizerRes, capacityResults, designState);
           }
-
-          // Build header banner summarising inputs used
-          const inputSummary = buildInputSummaryHTML(designState, resolvedSection, selectedCode, methodLabel);
-
-          // Render the full step-by-step calculation trace
-          renderCalculationResults(results, 'capacityResults');
-
-          // Prepend input summary ahead of calculations
-          capacityResults.insertAdjacentHTML('afterbegin', inputSummary);
-
-          // Store results globally so the wizard KPI bar can read them
-          window.__lastDesignResults = results;
-
-          // Update wizard KPI summary row and navigate to results tab
-          if (typeof window.__sdUpdateKPIs === 'function') {
-            window.__sdUpdateKPIs(results);
-          }
-
-          // Trigger MathJax if loaded
-          if (window.MathJax) {
-            MathJax.typesetPromise([capacityResults]).catch(err => console.warn('MathJax:', err));
-          }
-
         } catch (err) {
           console.error('[Check Capacity] Calculation error:', err);
           capacityResults.innerHTML = `
@@ -449,7 +567,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         color:var(--primary,#f5a623); margin-bottom:0.5rem; border-bottom:1px solid var(--border,#333);
                         padding-bottom:4px;">Applied Loads</div>
             <table style="width:100%; border-collapse:collapse;">
-              ${row('Pu / Pa',   state.loadPu,  'kN')}
+              ${row('Pc / Pa',   state.loadPc,  'kN')}
+              ${row('Pt / Pa',   state.loadPt,  'kN')}
               ${row('Vux / Vax', state.loadVux, 'kN')}
               ${row('Vuy / Vay', state.loadVuy, 'kN')}
               ${row('Mux / Max', state.loadMux, 'kN-m')}
@@ -481,15 +600,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Use a small timeout to allow UI to update with "Calculating..."
       setTimeout(() => {
-        const allowedFamilies = ['W', 'S', 'M', 'HP', 'C', 'MC', 'WT', 'MT', 'ST', 'L', 'Double Angle', 'HSS', 'HSS Square', 'HSS Rectangular', 'HSS Round', 'Pipe', 'Built-Up'];
+        const allowedFamilies = ['W', 'S', 'M', 'HP', 'C', 'MC', 'WT', 'MT', 'ST', 'L', 'DOUBLE_ANGLE', 'Double Angle', 'HSS', 'HSS Square', 'HSS Rectangular', 'HSS Round', 'Pipe', 'Built-Up'];
         
         const isAppropriate = (type, memType) => {
           if (!allowedFamilies.includes(type)) return false;
           
           // Filter out section types not appropriate for specific member configurations
           if (memType === 'beam' || memType === 'beam-column') {
-             // For bending, single/double angles and tees are typically not appropriate as primary beams
-             const inappropriate = ['L', 'Double Angle', 'WT', 'MT', 'ST'];
+             // Let the user select Tees and Double Angles since they now have flexure implementations
+             const inappropriate = ['L'];
              if (inappropriate.includes(type)) return false;
           }
           return true;
@@ -530,9 +649,11 @@ document.addEventListener('DOMContentLoaded', () => {
           state.Ky = getVal('kyFactor');
           state.Kz = getVal('kzFactor');
           state.Cb = getVal('cbFactor');
-          state.loadPu = getVal('loadPu') || 0;
+          state.loadPc = getVal('loadPc') || 0;
+          state.loadPt = getVal('loadPt') || 0;
           state.loadVux = getVal('loadVux') || 0;
           state.loadVuy = getVal('loadVuy') || 0;
+          state.loadLv = getVal('loadLv') || getVal('memberLength') || 0;
           state.loadMux = getVal('loadMux') || 0;
           state.loadMuy = getVal('loadMuy') || 0;
           state.loadTu = getVal('loadTu') || 0;
@@ -652,18 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const sec = item.section;
             document.getElementById('candModalTitle').textContent = sec.designation;
 
-            document.getElementById('candModalProps').innerHTML = `
-              <div style="display:flex;justify-content:space-between;"><span>Type:</span> <strong style="color:var(--chalk,#eee);">${sec.type}</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>Weight:</span> <strong style="color:var(--chalk,#eee);">${(sec.weight||0).toFixed(1)} kg/m</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>Area:</span> <strong style="color:var(--chalk,#eee);">${sec.area||'-'} mm²</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>Depth (d):</span> <strong style="color:var(--chalk,#eee);">${sec.d||'-'} mm</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>I<sub>x</sub>:</span> <strong style="color:var(--chalk,#eee);">${sec.Ix||'-'} 10⁶ mm⁴</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>I<sub>y</sub>:</span> <strong style="color:var(--chalk,#eee);">${sec.Iy||'-'} 10⁶ mm⁴</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>S<sub>x</sub>:</span> <strong style="color:var(--chalk,#eee);">${sec.Sx||'-'} 10³ mm³</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>S<sub>y</sub>:</span> <strong style="color:var(--chalk,#eee);">${sec.Sy||'-'} 10³ mm³</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>Z<sub>x</sub>:</span> <strong style="color:var(--chalk,#eee);">${sec.Zx||'-'} 10³ mm³</strong></div>
-              <div style="display:flex;justify-content:space-between;"><span>Z<sub>y</sub>:</span> <strong style="color:var(--chalk,#eee);">${sec.Zy||'-'} 10³ mm³</strong></div>
-            `;
+            updateProperties(sec, document.getElementById('candModalProps'));
 
             const isPassStr = item.ratio <= 1.0 ? 'PASS' : 'FAIL';
             const isPassColor = item.ratio <= 1.0 ? '#2ecc71' : '#e74c3c';

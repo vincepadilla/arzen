@@ -55,10 +55,23 @@ export function updateProperties(data, container) {
   html += renderItem('Type', data.type);
   html += renderItem('Weight (W)', data.weight, 'kg/m');
   html += renderItem('Area (A)', data.area, 'mm²');
-  html += renderItem('Depth (d)', data.d, 'mm');
-  html += renderItem('Width (bf)', data.bf, 'mm');
-  html += renderItem('Web Thickness (tw)', data.tw, 'mm');
-  html += renderItem('Flange Thickness (tf)', data.tf, 'mm');
+  
+  if (data.type === 'HSS' || data.type === 'PIPE' || (data.designation && data.designation.startsWith('HSS'))) {
+    if (data.OD) {
+      html += renderItem('Outer Diam. (OD)', data.OD, 'mm');
+      html += renderItem('Thickness (t)', data.t || data.tdes, 'mm');
+    } else {
+      html += renderItem('Height (H)', data.H || data.d, 'mm');
+      html += renderItem('Width (B)', data.b || data.B || data.bf, 'mm');
+      html += renderItem('Thickness (t)', data.t || data.tdes || data.tw, 'mm');
+    }
+  } else {
+    html += renderItem('Depth (d)', data.d, 'mm');
+    html += renderItem('Width (bf)', data.bf, 'mm');
+    html += renderItem('Web Thickness (tw)', data.tw, 'mm');
+    html += renderItem('Flange Thickness (tf)', data.tf, 'mm');
+  }
+  
   html += `</div>`;
 
   // Geometric Properties
@@ -146,8 +159,8 @@ export function renderSection(data) {
   const tw = data.tw || data.t || data.tdes || 10;
   const tf = data.tf || data.t || data.tdes || 10;
 
-  let spacing = data.spacing || 10;
-  if (type === '2L' || data.builtUpType === 'DOUBLE-ANGLE') {
+  let spacing = data.spacing || data.gap || 10;
+  if (['2L', 'DOUBLE_ANGLE', 'Double Angle', 'DOUBLE-ANGLE'].includes(type) || data.builtUpType === 'DOUBLE-ANGLE') {
     bf = (data.b || data.bf || 50) * 2 + spacing;
   }
 
@@ -173,24 +186,36 @@ export function renderSection(data) {
 
   let result = { svgContent: '', dimLine: '' };
 
-  if (['W', 'M', 'HP', 'S'].includes(type)) {
+  let family = data.isBuiltUp ? data.builtUpType : (data.type || (data.designation ? data.designation.split(/[^a-zA-Z]/)[0] : 'I-SECTION'));
+  
+  const getCanonicalType = (t) => {
+    if (['W', 'M', 'HP', 'S', 'I-SECTION', 'PLATE-GIRDER'].includes(t)) return 'I';
+    if (['C', 'MC', 'BU-CHANNEL', 'CHANNEL'].includes(t)) return 'C';
+    if (['L', 'SINGLE-ANGLE'].includes(t)) return 'L';
+    if (['2L', 'DOUBLE_ANGLE', 'Double Angle', 'DOUBLE-ANGLE'].includes(t)) return '2L';
+    if (['WT', 'MT', 'ST', 'BU-TEE', 'TEE'].includes(t)) return 'T';
+    if (['HSS', 'BOX', 'SQUARE-HSS', 'RECT-HSS'].includes(t)) return 'HSS';
+    return 'I';
+  };
+
+  const canonical = getCanonicalType(family);
+
+  if (canonical === 'I') {
     result = renderWSection(ctx);
-  } else if (['C', 'MC'].includes(type)) {
+  } else if (canonical === 'C') {
     result = renderChannel(ctx);
-  } else if (type === 'L') {
+  } else if (canonical === 'L') {
     result = renderAngle(ctx);
-  } else if (type === '2L') {
+  } else if (canonical === '2L') {
     result = renderDoubleAngle(ctx);
-  } else if (['WT', 'MT', 'ST'].includes(type)) {
+  } else if (canonical === 'T') {
     result = renderTee(ctx);
-  } else if (type === 'HSS') {
+  } else if (canonical === 'HSS') {
     if (data.OD) {
       result = renderRoundHSS(ctx);
     } else {
       result = renderHSS(ctx);
     }
-  } else if (type === 'BUILT-UP') {
-    result = renderBuiltUpSection(ctx, data);
   } else {
     // Default fallback
     result.svgContent = `<rect class="hover-component" data-tooltip="Section" x="${ctx.xLeft}" y="${ctx.yTop}" width="${ctx.scaledBf}" height="${ctx.scaledD}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />`;
@@ -202,6 +227,14 @@ export function renderSection(data) {
         <marker id="dimArrow" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto-start-reverse">
           <path d="M 0 0 L 4 2 L 0 4 z" fill="${dimColor}" />
         </marker>
+        <mask id="hssMask">
+          <rect x="0" y="0" width="100" height="100" fill="white" />
+          <rect x="${ctx.xLeft + ctx.scaledTw}" y="${ctx.yTop + ctx.scaledTw}" width="${Math.max(0, ctx.scaledBf - 2 * ctx.scaledTw)}" height="${Math.max(0, ctx.scaledD - 2 * ctx.scaledTw)}" rx="1.5" ry="1.5" fill="black" />
+        </mask>
+        <mask id="hssRoundMask">
+          <rect x="0" y="0" width="100" height="100" fill="white" />
+          <circle cx="${ctx.cx}" cy="${ctx.cy}" r="${Math.max(0, ctx.scaledD / 2 - ctx.scaledTw)}" fill="black" />
+        </mask>
       </defs>
       ${result.svgContent}
       ${result.dimLine}
@@ -220,10 +253,21 @@ export function updateIllustration(data, container) {
   const type = data.type || data.builtUpType || 'Built-up';
   const source = data.source || 'AISC 14th Edition';
   let dims = [];
-  if (data.d || data.H || data.OD) dims.push(`d=${data.d || data.H || data.OD}`);
-  if (data.bf || data.b || data.B) dims.push(`bf=${data.bf || data.b || data.B}`);
-  if (data.tw || data.t || data.tdes) dims.push(`tw=${data.tw || data.t || data.tdes}`);
-  if (data.tf) dims.push(`tf=${data.tf}`);
+  if (data.type === 'HSS' || data.type === 'PIPE' || (data.designation && data.designation.startsWith('HSS'))) {
+    if (data.OD) {
+      dims.push(`OD=${data.OD}`);
+      dims.push(`t=${data.t || data.tdes || data.tw}`);
+    } else {
+      dims.push(`H=${data.H || data.d}`);
+      dims.push(`B=${data.b || data.B || data.bf}`);
+      dims.push(`t=${data.t || data.tdes || data.tw}`);
+    }
+  } else {
+    if (data.d) dims.push(`d=${data.d}`);
+    if (data.bf || data.b) dims.push(`bf=${data.bf || data.b}`);
+    if (data.tw || data.t) dims.push(`tw=${data.tw || data.t}`);
+    if (data.tf) dims.push(`tf=${data.tf}`);
+  }
   const dimensions = dims.join(', ');
 
   const svgHTML = renderSection(data);
@@ -320,20 +364,7 @@ function renderWSection(ctx) {
   return { svgContent, dimLine };
 }
 
-function renderBuiltUpSection(ctx, data) {
-  const shape = data.builtUpType || 'I-SECTION'; // default
-
-  if (shape === 'BOX') {
-    return renderBoxSection(ctx);
-  } else if (shape === 'CHANNEL') {
-    return renderChannel(ctx);
-  } else if (shape === 'DOUBLE-ANGLE') {
-    return renderDoubleAngle(ctx);
-  } else {
-    // I-SECTION or PLATE GIRDER
-    return renderWSection(ctx);
-  }
-}
+// Removed redundant builtUpSection delegator since we now route through the main renderSection
 
 function renderBoxSection(ctx) {
   const { data, xLeft, yTop, yBottom, xRight, scaledBf, scaledTf, scaledTw, scaledD, cx, cy } = ctx;
@@ -433,10 +464,22 @@ function renderHSS(ctx) {
   const { data, xLeft, yTop, yBottom, xRight, scaledBf, scaledTw, scaledD, cx, cy } = ctx;
   const H = data.H || data.d || '-';
   const B = data.B || data.b || data.bf || '-';
-  const t = data.t || data.tdes || '-';
+  const t = data.t || data.tdes || data.tw || '-';
+  
+  if (data.H <= 0 || data.B <= 0 || data.t <= 0 || 2 * data.t >= data.H || 2 * data.t >= data.B) {
+    return {
+       svgContent: `<text x="50" y="50" text-anchor="middle" fill="red" font-size="6">Invalid HSS Dimensions</text>`,
+       dimLine: ''
+    };
+  }
+
+  const pathX = xLeft + scaledTw / 2;
+  const pathY = yTop + scaledTw / 2;
+  const pathW = scaledBf - scaledTw;
+  const pathH = scaledD - scaledTw;
+
   const svgContent = `
-    <rect class="hover-component" data-tooltip="Outer Wall: H=${H}, B=${B}, t=${t}" x="${xLeft}" y="${yTop}" width="${scaledBf}" height="${scaledD}" rx="3" ry="3" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />
-    <rect x="${xLeft + scaledTw}" y="${yTop + scaledTw}" width="${Math.max(0, scaledBf - 2 * scaledTw)}" height="${Math.max(0, scaledD - 2 * scaledTw)}" rx="1.5" ry="1.5" fill="var(--surface, #1e1e24)" stroke="${strokeColor}" stroke-width="${strokeWidth}" />
+    <rect class="hover-component" data-tooltip="HSS Wall: H=${H}, B=${B}, t=${t}" x="${pathX}" y="${pathY}" width="${Math.max(0, pathW)}" height="${Math.max(0, pathH)}" rx="2" ry="2" fill="none" stroke="${fillColor}" stroke-width="${scaledTw}" style="pointer-events:all;" onmouseover="this.style.stroke='#3b82f6'" onmouseout="this.style.stroke='${fillColor}'" />
   `;
   let dimLine = '';
   dimLine += drawVerticalDimension(xLeft, yTop, yBottom, 'H');
@@ -447,13 +490,19 @@ function renderHSS(ctx) {
 
 function renderRoundHSS(ctx) {
   const { data, cx, cy, scaledTw, scaledD } = ctx;
-  const rOuter = scaledD / 2;
-  const rInner = rOuter - scaledTw;
+  const rStroke = (scaledD - scaledTw) / 2;
   const OD = data.OD || data.d || data.H || '-';
-  const t = data.t || data.tdes || '-';
+  const t = data.t || data.tdes || data.tw || '-';
+
+  if (data.OD <= 0 || data.t <= 0 || 2 * data.t >= data.OD) {
+    return {
+       svgContent: `<text x="50" y="50" text-anchor="middle" fill="red" font-size="6">Invalid HSS Dimensions</text>`,
+       dimLine: ''
+    };
+  }
+
   const svgContent = `
-    <circle class="hover-component" data-tooltip="Outer Wall: OD=${OD}, t=${t}" cx="${cx}" cy="${cy}" r="${rOuter}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />
-    <circle cx="${cx}" cy="${cy}" r="${rInner > 0 ? rInner : 0}" fill="var(--surface, #1e1e24)" stroke="${strokeColor}" stroke-width="${strokeWidth}" />
+    <circle class="hover-component" data-tooltip="HSS Pipe: OD=${OD}, t=${t}" cx="${cx}" cy="${cy}" r="${Math.max(0, rStroke)}" fill="none" stroke="${fillColor}" stroke-width="${scaledTw}" style="pointer-events:all;" onmouseover="this.style.stroke='#3b82f6'" onmouseout="this.style.stroke='${fillColor}'" />
   `;
   let dimLine = '';
   dimLine += drawVerticalDimension(cx - scaledD/2, cy - scaledD/2, cy + scaledD/2, 'D');

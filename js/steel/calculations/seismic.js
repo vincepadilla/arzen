@@ -1,220 +1,293 @@
 /**
  * seismic.js
- * Seismic provisions checks per AISC 341-16 (ANSI/AISC 341-16)
- * Referenced by NSCP 2015 Volume 1 Section 5 for seismic design of steel structures.
+ * Seismic provisions checks per AISC 341-16 (ANSI/AISC 341-16) and standard Compactness (AISC 360-16 B4)
  *
- * Checks performed when seismic design is enabled:
- *  1.  Section compactness (Web & Flange λ vs λhd / λmd limits)
- *
- * Returns an array of calcObj conforming to the resultRenderer schema.
+ * Checks performed:
+ *  1. Section compactness (COMPACT, NON-COMPACT, SLENDER) per section type
+ *  2. Actual ductility classification (HIGHLY DUCTILE, MODERATELY DUCTILE, NOT DUCTILE)
  */
-
-// ─── Limits per AISC 341-16 Table D1.1 ───────────────────────────────────────
-
-/**
- * Highly-Ductile (hd) and Moderately-Ductile (md) width-to-thickness limits.
- * Returns { lambda_hd_flange, lambda_md_flange, lambda_hd_web, lambda_md_web }
- */
-function getCompactnessLimits(fy, E) {
-  const sqrtEFy = Math.sqrt(E / fy);
-  return {
-    // Flange (bf / 2tf)
-    lambda_hd_flange: 0.30 * sqrtEFy,
-    lambda_md_flange: 0.38 * sqrtEFy,
-    // Web in combined flexure-axial compression (Ca = 0 assumed for pure flexure)
-    lambda_hd_web:    2.45 * sqrtEFy,
-    lambda_md_web:    3.76 * sqrtEFy,
-    // Web for columns under compression (conservative - use flexure limits)
-    lambda_hd_web_col: 1.57 * sqrtEFy,
-    lambda_md_web_col: 3.76 * sqrtEFy,
-  };
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function codeRef(system, section) {
-  const std = system === 'smrf'  ? 'AISC 341-16 (SMF)'  :
-              system === 'imrf'  ? 'AISC 341-16 (IMF)'  :
-              system === 'omrf'  ? 'AISC 341-16 (OMF)'  : 'AISC 341-16';
-  return { standard: std, chapter: 'D', section };
-}
 
 function fmt(n, d = 2) { return (typeof n === 'number' && isFinite(n)) ? n.toFixed(d) : String(n); }
 
-// ─── 1. Flange Compactness ────────────────────────────────────────────────────
+// ─── PART 6: COMPACTNESS BY SECTION TYPE ─────────────────────────────────────
 
-function checkFlangeCompactness(state, limits, compReq, system) {
+function classify(lambda, lambdaP, lambdaR) {
+  if (lambdaP && lambda <= lambdaP) return 'COMPACT';
+  if (lambdaR && lambda <= lambdaR) return 'NON-COMPACT';
+  return 'SLENDER';
+}
+
+function classifyAxial(lambda, lambdaR) {
+  if (lambda <= lambdaR) return 'NON-SLENDER';
+  return 'SLENDER';
+}
+
+function checkWCompactness(state) {
   const { fy, E } = state.material;
   const bf_2tf = state.section.bf_2tf;
-
-  const limitLabel = compReq === 'highly-ductile' ? 'λhd' : 'λmd';
-  const limitVal   = compReq === 'highly-ductile' ? limits.lambda_hd_flange : limits.lambda_md_flange;
-  const ratio      = bf_2tf / limitVal;
-  const status     = ratio <= 1.0 ? 'COMPACT' : 'NON-COMPACT';
-
-  return {
-    limitState: `Flange Compactness — ${limitLabel} (AISC 341-16)`,
-    codeReference: codeRef(system, 'D1.1'),
-    formula: `\\( \\frac{b_f}{2t_f} \\le \\lambda_{${compReq === 'highly-ductile' ? 'hd' : 'md'}} = ${compReq === 'highly-ductile' ? '0.30' : '0.38'} \\sqrt{\\frac{E}{F_y}} \\)`,
-    variables: {
-      bf_2tf:    { symbol: '\\( b_f / 2t_f \\)',  value: fmt(bf_2tf, 2), unit: '' },
-      LimitVal:  { symbol: `\\( \\lambda_{${limitLabel}} \\)`, value: fmt(limitVal, 2), unit: '' },
-      E:         { symbol: '\\( E \\)',            value: E,              unit: 'MPa' },
-      Fy:        { symbol: '\\( F_y \\)',          value: fy,             unit: 'MPa' },
-    },
-    substitution: `\\( ${fmt(bf_2tf, 2)} \\le ${fmt(limitVal, 2)} \\)`,
-    calculation:  `bf/(2tf) = ${fmt(bf_2tf, 2)},  ${limitLabel} = ${fmt(limitVal, 2)}`,
-    result:       { value: fmt(ratio, 3), unit: '' },
-    resistanceFactor: { symbol: '', value: null },
-    designStrength: {
-      formula: `Limit ${limitLabel}`,
-      substitution: fmt(limitVal, 2),
-      value: Number(fmt(limitVal, 2)),
-      unit: ''
-    },
-    demand:  { value: fmt(bf_2tf, 2), unit: '' },
-    ratio:   null,
-    status,
-    steps: [
-      {
-        step: 1,
-        title: 'Flange Slenderness Ratio',
-        formula: 'λf = bf / (2·tf)',
-        substitution: `bf/(2tf) from section properties`,
-        result: fmt(bf_2tf, 2),
-        unit: '',
-      },
-      {
-        step: 2,
-        title: `Seismic Compactness Limit (${limitLabel})`,
-        formula: compReq === 'highly-ductile'
-          ? 'λhd = 0.30 × √(E/Fy)'
-          : 'λmd = 0.38 × √(E/Fy)',
-        substitution: compReq === 'highly-ductile'
-          ? `0.30 × √(${E}/${fy})`
-          : `0.38 × √(${E}/${fy})`,
-        result: fmt(limitVal, 2),
-        unit: '',
-      },
-      {
-        step: 3,
-        title: 'Flange Compactness Check',
-        formula: `λf ≤ ${limitLabel}?`,
-        substitution: `${fmt(bf_2tf, 2)} ≤ ${fmt(limitVal, 2)}?`,
-        result: `${fmt(bf_2tf, 2)} ${ratio <= 1.0 ? '≤' : '>'} ${fmt(limitVal, 2)}  →  ${status}`,
-        unit: '',
-      },
-    ],
-  };
+  const h_tw = state.section.h_tw;
+  const sqrtEFy = Math.sqrt(E / fy);
+  
+  const results = [];
+  
+  if (bf_2tf != null) {
+    const ax_lam_r = 0.56 * sqrtEFy;
+    const fl_lam_p = 0.38 * sqrtEFy;
+    const fl_lam_r = 1.00 * sqrtEFy;
+    
+    results.push({
+      limitState: "Flange Compactness",
+      element: 'Flange',
+      lambda: bf_2tf,
+      axial: { lambdaR: ax_lam_r, classification: classifyAxial(bf_2tf, ax_lam_r) },
+      flexural: { lambdaP: fl_lam_p, lambdaR: fl_lam_r, classification: classify(bf_2tf, fl_lam_p, fl_lam_r) }
+    });
+  }
+  
+  if (h_tw != null) {
+    const ax_lam_r = 1.49 * sqrtEFy;
+    const fl_lam_p = 3.76 * sqrtEFy;
+    const fl_lam_r = 5.70 * sqrtEFy;
+    
+    results.push({
+      limitState: "Web Compactness",
+      element: 'Web',
+      lambda: h_tw,
+      axial: { lambdaR: ax_lam_r, classification: classifyAxial(h_tw, ax_lam_r) },
+      flexural: { lambdaP: fl_lam_p, lambdaR: fl_lam_r, classification: classify(h_tw, fl_lam_p, fl_lam_r) }
+    });
+  }
+  
+  return results;
 }
 
-// ─── 2. Web Compactness ───────────────────────────────────────────────────────
-
-function checkWebCompactness(state, limits, compReq, system) {
+function checkHSSCompactness(state) {
   const { fy, E } = state.material;
-  const h_tw     = state.section.h_tw;
-  const memberType = state.memberType;
-
-  // Use column web limit for columns under axial load, otherwise beam limit
-  const isColumn = (memberType === 'column' || memberType === 'compression' || memberType === 'beam-column');
-
-  const limitLabel = compReq === 'highly-ductile' ? 'λhd' : 'λmd';
-  const limitVal   = compReq === 'highly-ductile'
-    ? (isColumn ? limits.lambda_hd_web_col : limits.lambda_hd_web)
-    : limits.lambda_md_web;
-
-  const limitFormula = compReq === 'highly-ductile'
-    ? (isColumn ? '\\( 1.57\\sqrt{E/F_y} \\)' : '\\( 2.45\\sqrt{E/F_y} \\)')
-    : '\\( 3.76\\sqrt{E/F_y} \\)';
-
-  const multiplier = compReq === 'highly-ductile'
-    ? (isColumn ? 1.57 : 2.45)
-    : 3.76;
-
-  const ratio  = h_tw / limitVal;
-  const status = ratio <= 1.0 ? 'COMPACT' : 'NON-COMPACT';
-
-  return {
-    limitState: `Web Compactness — ${limitLabel} (AISC 341-16)`,
-    codeReference: codeRef(system, 'D1.1'),
-    formula: `\\( \\frac{h}{t_w} \\le \\lambda_{${compReq === 'highly-ductile' ? 'hd' : 'md'}} = ${multiplier}\\sqrt{\\frac{E}{F_y}} \\)`,
-    variables: {
-      h_tw:      { symbol: '\\( h/t_w \\)',        value: fmt(h_tw, 2),    unit: '' },
-      LimitVal:  { symbol: `\\( \\lambda_{${limitLabel}} \\)`, value: fmt(limitVal, 2), unit: '' },
-      E:         { symbol: '\\( E \\)',             value: E,               unit: 'MPa' },
-      Fy:        { symbol: '\\( F_y \\)',           value: fy,              unit: 'MPa' },
-    },
-    substitution: `\\( ${fmt(h_tw, 2)} \\le ${fmt(limitVal, 2)} \\)`,
-    calculation:  `h/tw = ${fmt(h_tw, 2)},  ${limitLabel} = ${fmt(limitVal, 2)}`,
-    result:       { value: fmt(ratio, 3), unit: '' },
-    resistanceFactor: { symbol: '', value: null },
-    designStrength: {
-      formula: `Limit ${limitLabel}`,
-      substitution: fmt(limitVal, 2),
-      value: Number(fmt(limitVal, 2)),
-      unit: ''
-    },
-    demand:  { value: fmt(h_tw, 2), unit: '' },
-    ratio:   null,
-    status,
-    steps: [
-      {
-        step: 1,
-        title: 'Web Slenderness Ratio',
-        formula: 'λw = h / tw',
-        substitution: `h/tw from section properties`,
-        result: fmt(h_tw, 2),
-        unit: '',
-      },
-      {
-        step: 2,
-        title: `Seismic Compactness Limit (${limitLabel})`,
-        formula: `${limitLabel} = ${multiplier} × √(E/Fy)  [${isColumn ? 'Column' : 'Beam'} Web]`,
-        substitution: `${multiplier} × √(${E}/${fy})`,
-        result: fmt(limitVal, 2),
-        unit: '',
-      },
-      {
-        step: 3,
-        title: 'Web Compactness Check',
-        formula: `λw ≤ ${limitLabel}?`,
-        substitution: `${fmt(h_tw, 2)} ≤ ${fmt(limitVal, 2)}?`,
-        result: `${fmt(h_tw, 2)} ${ratio <= 1.0 ? '≤' : '>'} ${fmt(limitVal, 2)}  →  ${status}`,
-        unit: '',
-      },
-    ],
-  };
+  const sqrtEFy = Math.sqrt(E / fy);
+  
+  const results = [];
+  const b_t = state.section.b_tdes || state.section.b_t || state.section.bf_2tf * 2; 
+  const h_t = state.section.h_tdes || state.section.h_t || state.section.h_tw;
+  
+  if (b_t != null) {
+     const p = 1.12 * sqrtEFy;
+     const r = 1.40 * sqrtEFy;
+     results.push({
+       limitState: "Flange/Wall Compactness (Major-Axis Flange / Minor-Axis Web)",
+       element: 'Flange/Wall',
+       lambda: b_t,
+       axial: { lambdaR: null, classification: 'N/A' },
+       flexural: { lambdaP: p, lambdaR: r, classification: classify(b_t, p, r) }
+     });
+  }
+  if (h_t != null) {
+     const p = 2.42 * sqrtEFy;
+     const r = 5.70 * sqrtEFy;
+     results.push({
+       limitState: "Web/Wall Compactness (Major-Axis Web / Minor-Axis Flange)",
+       element: 'Web/Wall',
+       lambda: h_t,
+       axial: { lambdaR: null, classification: 'N/A' },
+       flexural: { lambdaP: p, lambdaR: r, classification: classify(h_t, p, r) }
+     });
+  }
+  return results;
 }
 
-// ─── Main Export ──────────────────────────────────────────────────────────────
-
-/**
- * Run all applicable seismic checks.
- * @returns { results: calcObj[], seismicNote: string }
- */
-export function checkSeismic(state) {
-  if (!state.seismicEnabled || !state.seismicParams) {
-    return { results: [], seismicNote: null };
-  }
-
-  const { fy, E }    = state.material;
-  const { system, compactness } = state.seismicParams;
-  const limits       = getCompactnessLimits(fy, E);
-
-  const checks = [];
-
-  // ── 1 & 2: Compactness (all member types) ─────────────────────────────────
+function checkTeeCompactness(state) {
+  const { fy, E } = state.material;
+  const sqrtEFy = Math.sqrt(E / fy);
+  
+  const results = [];
   if (state.section.bf_2tf != null) {
-    checks.push(checkFlangeCompactness(state, limits, compactness, system));
+     const ax_lam_r = 0.56 * sqrtEFy;
+     const fl_lam_p = 0.38 * sqrtEFy;
+     const fl_lam_r = 1.00 * sqrtEFy;
+     results.push({
+       limitState: "Flange Compactness",
+       element: 'Flange',
+       lambda: state.section.bf_2tf,
+       axial: { lambdaR: ax_lam_r, classification: classifyAxial(state.section.bf_2tf, ax_lam_r) },
+       flexural: { lambdaP: fl_lam_p, lambdaR: fl_lam_r, classification: classify(state.section.bf_2tf, fl_lam_p, fl_lam_r) }
+     });
   }
-  if (state.section.h_tw != null) {
-    checks.push(checkWebCompactness(state, limits, compactness, system));
+  if (state.section.d_tw != null || state.section.h_tw != null) {
+     const lambda = state.section.d_tw || state.section.h_tw;
+     const ax_lam_r = 0.75 * sqrtEFy;
+     const fl_lam_p = 0.84 * sqrtEFy;
+     const fl_lam_r = 1.52 * sqrtEFy;
+     results.push({
+       limitState: "Stem Compactness",
+       element: 'Stem',
+       lambda: lambda,
+       axial: { lambdaR: ax_lam_r, classification: classifyAxial(lambda, ax_lam_r) },
+       flexural: { lambdaP: fl_lam_p, lambdaR: fl_lam_r, classification: classify(lambda, fl_lam_p, fl_lam_r) }
+     });
   }
+  return results;
+}
 
-  // ── System note ───────────────────────────────────────────────────────────
-  const systemLabels = { smrf: 'Special Moment Frame', imrf: 'Intermediate Moment Frame', omrf: 'Ordinary Moment Frame' };
-  const seismicNote = `Seismic provisions applied per AISC 341-16 for ${systemLabels[system] || system}. ` +
-    `Compactness requirement: ${compactness === 'highly-ductile' ? 'Highly Ductile (HD)' : 'Moderately Ductile (MD)'}.`;
+function checkAngleCompactness(state) {
+  const { fy, E } = state.material;
+  const b_t = state.section.b_t; 
+  const sqrtEFy = Math.sqrt(E / fy);
+  
+  const results = [];
+  if (b_t != null) {
+    const ax_lam_r = 0.45 * sqrtEFy;
+    const fl_lam_p = 0.54 * sqrtEFy;
+    const fl_lam_r = 0.91 * sqrtEFy;
+    
+    results.push({
+      limitState: "Leg Compactness",
+      element: 'Leg',
+      lambda: b_t,
+      axial: { lambdaR: ax_lam_r, classification: classifyAxial(b_t, ax_lam_r) },
+      flexural: { lambdaP: fl_lam_p, lambdaR: fl_lam_r, classification: classify(b_t, fl_lam_p, fl_lam_r) }
+    });
+  }
+  return results;
+}
 
-  return { results: checks, seismicNote };
+// ─── PART 7: ACTUAL DUCTILITY CLASSIFICATION ──────────────────────────────────
+
+function classifyDuctility(lambda, lambdaHD, lambdaMD) {
+  if (lambdaHD && lambda <= lambdaHD) return 'HIGHLY DUCTILE';
+  if (lambdaMD && lambda <= lambdaMD) return 'MODERATELY DUCTILE';
+  return 'NOT DUCTILE';
+}
+
+function checkWDuctility(state) {
+  const { fy, E } = state.material;
+  const bf_2tf = state.section.bf_2tf;
+  const h_tw = state.section.h_tw;
+  const sqrtEFy = Math.sqrt(E / fy);
+  
+  const results = [];
+  
+  // Flange
+  if (bf_2tf != null) {
+      results.push({
+          element: 'Flange',
+          lambda: bf_2tf,
+          lambdaHD: 0.30 * sqrtEFy,
+          lambdaMD: 0.38 * sqrtEFy,
+          classification: classifyDuctility(bf_2tf, 0.30 * sqrtEFy, 0.38 * sqrtEFy)
+      });
+  }
+  
+  // Web
+  if (h_tw != null) {
+      const isLRFD = state.designMethod === 'lrfd';
+      let pcN = 0;
+      if (state.loadPc > 0) {
+          pcN = state.loadPc * 1000;
+      }
+      const ag = state.section.area;
+      const Ca = isLRFD ? (pcN / (0.90 * ag * fy)) : ((1.67 * pcN) / (ag * fy));
+      
+      let lambda_HD;
+      if (Ca <= 0.125) {
+          lambda_HD = 2.45 * sqrtEFy * (1 - 0.93 * Ca);
+      } else {
+          lambda_HD = Math.max(0.77 * sqrtEFy * (2.93 - Ca), 1.49 * sqrtEFy);
+      }
+      
+      let lambda_MD;
+      if (Ca <= 0.125) {
+          lambda_MD = 3.76 * sqrtEFy * (1 - 2.75 * Ca);
+      } else {
+          lambda_MD = Math.max(1.12 * sqrtEFy * (2.33 - Ca), 1.49 * sqrtEFy);
+      }
+      
+      results.push({
+          element: 'Web',
+          lambda: h_tw,
+          Ca: Ca,
+          lambdaHD: lambda_HD,
+          lambdaMD: lambda_MD,
+          classification: classifyDuctility(h_tw, lambda_HD, lambda_MD)
+      });
+  }
+  return results;
+}
+
+function checkHSSDuctility(state) {
+  const { fy, E } = state.material;
+  const sqrtEFy = Math.sqrt(E / fy);
+  const results = [];
+  const b_t = state.section.b_tdes || state.section.b_t || state.section.bf_2tf * 2;
+  if (b_t != null) {
+     const lambdaHD = 0.55 * sqrtEFy;
+     const lambdaMD = 0.64 * sqrtEFy;
+     results.push({
+         element: 'Flange/Wall',
+         lambda: b_t,
+         lambdaHD: lambdaHD,
+         lambdaMD: lambdaMD,
+         classification: classifyDuctility(b_t, lambdaHD, lambdaMD)
+     });
+  }
+  return results;
+}
+
+function checkAngleDuctility(state) {
+  const { fy, E } = state.material;
+  const b_t = state.section.b_t; 
+  const sqrtEFy = Math.sqrt(E / fy);
+  
+  const results = [];
+  if (b_t != null) {
+      const lambda_HD = 0.30 * sqrtEFy;
+      const lambda_MD = 0.38 * sqrtEFy;
+      results.push({
+          element: 'Leg',
+          lambda: b_t,
+          lambdaHD: lambda_HD,
+          lambdaMD: lambda_MD,
+          classification: classifyDuctility(b_t, lambda_HD, lambda_MD)
+      });
+  }
+  return results;
+}
+
+
+// ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
+
+export function checkCompactness(state) {
+  const type = state.section.type;
+  if (['W', 'M', 'S', 'HP'].includes(type) || state.section.builtUpType === 'I-SECTION' || state.section.builtUpType === 'PLATE-GIRDER') {
+      return checkWCompactness(state);
+  } else if (['HSS Square', 'HSS Rectangular', 'HSS Round', 'Pipe'].includes(type) || state.section.builtUpType === 'BOX') {
+      return checkHSSCompactness(state);
+  } else if (['WT', 'MT', 'ST'].includes(type)) {
+      return checkTeeCompactness(state);
+  } else if (['L', 'DOUBLE_ANGLE', 'Double Angle'].includes(type)) {
+      return checkAngleCompactness(state);
+  }
+  return [];
+}
+
+export function checkDuctility(state) {
+  const type = state.section.type;
+  if (['W', 'M', 'S', 'HP'].includes(type) || state.section.builtUpType === 'I-SECTION' || state.section.builtUpType === 'PLATE-GIRDER') {
+      return checkWDuctility(state);
+  } else if (['HSS Square', 'HSS Rectangular', 'HSS Round', 'Pipe'].includes(type) || state.section.builtUpType === 'BOX') {
+      return checkHSSDuctility(state);
+  } else if (['L', 'DOUBLE_ANGLE', 'Double Angle'].includes(type)) {
+      return checkAngleDuctility(state);
+  }
+  return [];
+}
+
+export function checkSeismic(state) {
+  // Legacy function format, but returns nested objects now.
+  const compactnessResults = checkCompactness(state);
+  const ductilityResults = checkDuctility(state);
+  
+  return { 
+      compactness: compactnessResults, 
+      ductility: ductilityResults,
+      seismicNote: "Compactness and Ductility calculated based on section actual geometry."
+  };
 }

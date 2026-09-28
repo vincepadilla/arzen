@@ -11,37 +11,65 @@ import { updateIllustration, updateProperties } from './sectionRenderer.js';
 // ─── Shape Configurations ────────────────────────────────────────────────────
 
 const SHAPE_CONFIGS = {
-  'I-SECTION': {
+  'w-shape': {
+    typeId: 'I-SECTION',
     label: 'Built-Up I-Section',
     icon: 'fa-i-cursor',
     description: 'Doubly-symmetric I-shaped member (two flange plates + web plate)',
     fields: ['d', 'bf', 'tw', 'tf'],
   },
-  'PLATE-GIRDER': {
-    label: 'Plate Girder',
-    icon: 'fa-layer-group',
-    description: 'Deep I-shaped plate girder (same geometry as Built-Up I, distinct label)',
+  'wt-shape': {
+    typeId: 'BU-TEE',
+    label: 'Built-Up T-Section',
+    icon: 'fa-t',
+    description: 'Tee shaped section (flange + stem)',
     fields: ['d', 'bf', 'tw', 'tf'],
   },
-  'BOX': {
-    label: 'Built-Up Box Section',
-    icon: 'fa-square',
-    description: 'Hollow rectangular box (two flange + two web plates)',
-    fields: ['d', 'bf', 'tw', 'tf'],
-  },
-  'BU-CHANNEL': {
+  'c-shape': {
+    typeId: 'BU-CHANNEL',
     label: 'Built-Up Channel',
     icon: 'fa-grip-lines-vertical',
     description: 'Open channel section (web + two outstand flange plates)',
     fields: ['d', 'bf', 'tw', 'tf'],
   },
+  'angle': {
+    typeId: 'SINGLE-ANGLE',
+    label: 'Single Angle',
+    icon: 'fa-angle-right',
+    description: 'Equal or unequal leg angle',
+    fields: ['d', 'b', 't'],
+  },
+  'double-angle': {
+    typeId: 'DOUBLE-ANGLE',
+    label: 'Double Angle',
+    icon: 'fa-angle-double-right',
+    description: 'Two angles back-to-back with a gap',
+    fields: ['d', 'b', 't', 'gap'],
+  },
+  'hss-rect': {
+    typeId: 'BOX',
+    label: 'Built-Up Box Section',
+    icon: 'fa-square',
+    description: 'Hollow rectangular box',
+    fields: ['d', 'bf', 'tw', 'tf'],
+  },
+  'hss-round': {
+    typeId: 'BOX',
+    label: 'Built-Up Box Section',
+    icon: 'fa-square',
+    description: 'Hollow rectangular box',
+    fields: ['d', 'bf', 'tw', 'tf'],
+  },
 };
 
 const FIELD_META = {
-  d:  { label: 'Overall Depth, d', unit: 'mm', placeholder: 'e.g. 400', hint: 'Total height of section' },
-  bf: { label: 'Flange Width, bf', unit: 'mm', placeholder: 'e.g. 200', hint: 'Width of flange plates' },
-  tw: { label: 'Web Thickness, tw', unit: 'mm', placeholder: 'e.g. 10',  hint: 'Thickness of web plate' },
-  tf: { label: 'Flange Thickness, tf', unit: 'mm', placeholder: 'e.g. 16',  hint: 'Thickness of flange plates' },
+  d:  { label: 'Depth/Leg 1 (d)', unit: 'mm', placeholder: 'e.g. 400', hint: 'Vertical height/leg' },
+  bf: { label: 'Flange Width (bf)', unit: 'mm', placeholder: 'e.g. 200', hint: 'Horizontal width' },
+  tw: { label: 'Web Thickness (tw)', unit: 'mm', placeholder: 'e.g. 10',  hint: 'Vertical thickness' },
+  tf: { label: 'Flange Thickness (tf)', unit: 'mm', placeholder: 'e.g. 16',  hint: 'Horizontal thickness' },
+  b:  { label: 'Leg 2 (b)', unit: 'mm', placeholder: 'e.g. 100', hint: 'Horizontal leg' },
+  t:  { label: 'Thickness (t)', unit: 'mm', placeholder: 'e.g. 10', hint: 'Leg thickness' },
+  gap: { label: 'Gap Between Angles', unit: 'mm', placeholder: 'e.g. 10', hint: 'Clear distance' },
 };
 
 // ─── Main Export ─────────────────────────────────────────────────────────────
@@ -52,23 +80,21 @@ const FIELD_META = {
  * @param {Function}    onApply     - Callback(sectionObj) when user clicks "Apply"
  * @param {Object|null} seedSection - Optional W section to pre-fill dimensions from
  */
-export function initBuiltUpPanel(container, onApply, seedSection = null) {
-  container.innerHTML = buildPanelHTML(seedSection);
-  wirePanel(container, onApply, seedSection);
+export function initBuiltUpPanel(container, onApply, seedSection = null, family = 'w-shape') {
+  container.innerHTML = buildPanelHTML(seedSection, family);
+  wirePanel(container, onApply, seedSection, family);
 }
 
 // ─── HTML Builder ─────────────────────────────────────────────────────────────
 
-function buildPanelHTML(seed) {
-  const typeOptions = Object.entries(SHAPE_CONFIGS)
-    .map(([key, cfg]) =>
-      `<option value="${key}">${cfg.label}</option>`
-    ).join('');
+function buildPanelHTML(seed, family) {
+  const cfg = SHAPE_CONFIGS[family] || SHAPE_CONFIGS['w-shape'];
 
   const seedD  = seed?.d  ?? '';
-  const seedBf = seed?.bf ?? '';
-  const seedTw = seed?.tw ?? '';
+  const seedBf = seed?.bf ?? seed?.b ?? '';
+  const seedTw = seed?.tw ?? seed?.t ?? '';
   const seedTf = seed?.tf ?? '';
+  const seedGap = '';
 
   return `
     <div id="builtUpDesigner" style="
@@ -132,19 +158,11 @@ function buildPanelHTML(seed) {
 
       <!-- Type Selector -->
       <div class="bu-section-header">
-        <i class="fas fa-shapes"></i>
-        <span>Section Type</span>
-      </div>
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:0.75rem; margin-bottom:1.25rem;" id="buTypeGrid">
-        ${Object.entries(SHAPE_CONFIGS).map(([key, cfg]) => `
-          <button class="bu-type-btn ${key === 'I-SECTION' ? 'active' : ''}" data-type="${key}">
-            <i class="fas ${cfg.icon}"></i>
-            <span>${cfg.label}</span>
-          </button>
-        `).join('')}
+        <i class="fas ${cfg.icon}"></i>
+        <span>${cfg.label}</span>
       </div>
       <div id="buTypeDesc" style="font-size:0.83rem; color:var(--mist,#999); margin-bottom:1rem; font-style:italic;">
-        ${SHAPE_CONFIGS['I-SECTION'].description}
+        ${cfg.description}
       </div>
 
       <hr class="bu-divider">
@@ -166,8 +184,8 @@ function buildPanelHTML(seed) {
         <span>Plate Dimensions</span>
       </div>
       <div class="bu-grid" id="buDimGrid">
-        ${['d','bf','tw','tf'].map(key => buildFieldHTML(key,
-            key === 'd' ? seedD : key === 'bf' ? seedBf : key === 'tw' ? seedTw : seedTf
+        ${cfg.fields.map(key => buildFieldHTML(key,
+            key === 'd' ? seedD : key === 'bf' ? seedBf : key === 'tw' ? seedTw : key === 'tf' ? seedTf : key === 'b' ? seedBf : key === 't' ? seedTw : seedGap
         )).join('')}
       </div>
 
@@ -229,21 +247,10 @@ function buildFieldHTML(key, seedVal) {
 
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
-function wirePanel(container, onApply, seedSection) {
-  let currentType = 'I-SECTION';
+function wirePanel(container, onApply, seedSection, family) {
+  const cfg = SHAPE_CONFIGS[family] || SHAPE_CONFIGS['w-shape'];
+  let currentType = cfg.typeId;
   let currentSection = null;
-
-  // Type buttons
-  container.querySelectorAll('.bu-type-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.bu-type-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentType = btn.dataset.type;
-      const desc = container.querySelector('#buTypeDesc');
-      if (desc) desc.textContent = SHAPE_CONFIGS[currentType]?.description ?? '';
-      recalculate();
-    });
-  });
 
   // Dimension inputs
   container.querySelectorAll('input[data-field]').forEach(input => {
@@ -292,9 +299,12 @@ function wirePanel(container, onApply, seedSection) {
     const bf = getVal('bf');
     const tw = getVal('tw');
     const tf = getVal('tf');
+    const b  = getVal('b');
+    const t  = getVal('t');
+    const gap = getVal('gap');
 
     const desig = desigInput?.value?.trim() || null;
-    const config = { type: currentType, d, bf, tw, tf, designation: desig };
+    const config = { type: currentType, d, bf, tw, tf, b, t, gap, designation: desig };
 
     // Validate
     const errors = validateBuiltUpInputs(config);
@@ -315,11 +325,10 @@ function wirePanel(container, onApply, seedSection) {
       statusBadge.style.background = 'rgba(231,76,60,0.15)';
       statusBadge.style.color = '#e74c3c';
       statusBadge.textContent = 'Invalid dimensions';
-      // Highlight problematic fields (simple heuristic: if all 4 fields null, none)
-      if (d === null)  container.querySelector('#buInput_d')?.classList.add('invalid');
-      if (bf === null) container.querySelector('#buInput_bf')?.classList.add('invalid');
-      if (tw === null) container.querySelector('#buInput_tw')?.classList.add('invalid');
-      if (tf === null) container.querySelector('#buInput_tf')?.classList.add('invalid');
+      // Highlight problematic fields
+      cfg.fields.forEach(k => {
+        if (getVal(k) === null) container.querySelector(`#buInput_${k}`)?.classList.add('invalid');
+      });
       clearPreview(container);
       currentSection = null;
       return;

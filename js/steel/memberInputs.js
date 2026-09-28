@@ -9,7 +9,8 @@ export function updateMemberTypeFields() {
   const groupKy = document.getElementById('group-ky');
   const groupKz = document.getElementById('group-kz');
   const groupCb = document.getElementById('group-cb');
-  const groupAxial = document.getElementById('group-pu');
+  const groupPc = document.getElementById('group-pc');
+  const groupPt = document.getElementById('group-pt');
   const groupVux = document.getElementById('group-vux');
   const groupVuy = document.getElementById('group-vuy');
   const groupMux = document.getElementById('group-mux');
@@ -29,7 +30,8 @@ export function updateMemberTypeFields() {
   if(groupKy) groupKy.style.display = 'none';
   if(groupKz) groupKz.style.display = 'none';
   if(groupCb) groupCb.style.display = 'none';
-  if(groupAxial) groupAxial.style.display = 'none';
+  if(groupPc) groupPc.style.display = 'none';
+  if(groupPt) groupPt.style.display = 'none';
   if(groupVux) groupVux.style.display = 'none';
   if(groupVuy) groupVuy.style.display = 'none';
   if(groupMux) groupMux.style.display = 'none';
@@ -56,7 +58,10 @@ export function updateMemberTypeFields() {
     if(groupKx) groupKx.style.display = 'block';
     if(groupKy) groupKy.style.display = 'block';
     if(groupKz) groupKz.style.display = 'block';
-    if(groupAxial) groupAxial.style.display = 'block';
+    
+    if (type === 'column' || type === 'compression') {
+        if(groupPc) groupPc.style.display = 'block';
+    }
     if (type === 'column') {
        if(groupLbt) groupLbt.style.display = 'block';
        if(groupLbb) groupLbb.style.display = 'block';
@@ -68,7 +73,12 @@ export function updateMemberTypeFields() {
     }
   } else if (type === 'brace' || type === 'tension') {
     if(groupL) groupL.style.display = 'block';
-    if(groupAxial) groupAxial.style.display = 'block';
+    if (type === 'tension') {
+        if(groupPt) groupPt.style.display = 'block';
+    } else {
+        if(groupPc) groupPc.style.display = 'block';
+        if(groupPt) groupPt.style.display = 'block';
+    }
   } else if (type === 'beam-column') {
     if(groupL) groupL.style.display = 'block';
     if(groupLbx) groupLbx.style.display = 'block';
@@ -79,7 +89,8 @@ export function updateMemberTypeFields() {
     if(groupKy) groupKy.style.display = 'block';
     if(groupKz) groupKz.style.display = 'block';
     if(groupCb) groupCb.style.display = 'block';
-    if(groupAxial) groupAxial.style.display = 'block';
+    if(groupPc) groupPc.style.display = 'block';
+    if(groupPt) groupPt.style.display = 'block';
     if(groupVux) groupVux.style.display = 'block';
     if(groupVuy) groupVuy.style.display = 'block';
     if(groupMux) groupMux.style.display = 'block';

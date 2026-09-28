@@ -271,7 +271,7 @@
 /* Modals */
 .modal { display: none; position: fixed; inset: 0; z-index: 9999; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); padding: 1rem; }
 .modal.is-open { display: flex; }
-.modal-content { position: relative; background: var(--plate, #1a1a2e); border: 1px solid var(--line, #333); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); width: 100%; max-width: 960px; max-height: 90vh; overflow-y: auto; padding: 2rem; }
+.modal-content { position: relative; background: var(--plate, #1a1a2e); border: 1px solid var(--line, #333); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); width: 100%; max-width: 1400px; max-height: 90vh; overflow-y: auto; padding: 2rem; }
 .close-btn { position: absolute; top: 1rem; right: 1.25rem; font-size: 1.8rem; line-height: 1; color: var(--mist, #888); cursor: pointer; transition: color 0.2s; user-select: none; }
 .close-btn:hover { color: var(--chalk, #fff); }
 

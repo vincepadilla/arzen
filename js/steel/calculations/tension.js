@@ -3,7 +3,7 @@ export function checkTension(state) {
   const fy = state.material.fy; // MPa (N/mm2)
   const fu = state.material.fu; // MPa (N/mm2)
   const ag = state.section.area; // mm2
-  const pu = state.loadPu || 0; // kN
+  const pu = state.loadPt || 0; // kN
   const isLRFD = state.designMethod === 'lrfd';
 
   // --- Gross Section Yielding ---
@@ -34,14 +34,14 @@ export function checkTension(state) {
     designStrength: {
         formula: isLRFD ? "\\( \\phi P_n \\)" : "\\( P_n / \\Omega \\)",
         substitution: isLRFD ? `\\( ${factor_yield} \\times ${pn_yield_kN.toFixed(2)} \\)` : `\\( \\frac{${pn_yield_kN.toFixed(2)}}{${factor_yield}} \\)`,
-        value: Number(ds_yield.toFixed(2)),
+        value: ds_yield,
         unit: "kN"
     },
     demand: { value: pu, unit: "kN" },
     ratio: {
         formula: isLRFD ? "\\( P_u / \\phi P_n \\)" : "\\( P_a / (P_n / \\Omega) \\)",
         substitution: `\\( \\frac{${pu}}{${ds_yield.toFixed(2)}} \\)`,
-        value: Number(ratio_yield.toFixed(3))
+        value: ratio_yield
     },
     status: ratio_yield <= 1.0 ? "PASS" : "FAIL",
     steps: [
@@ -81,8 +81,26 @@ export function checkTension(state) {
   };
 
   // --- Net Section Fracture ---
-  // Assumption: Ae = 0.75 * Ag (Simplified for unknown connection)
-  const ae = 0.75 * ag;
+  let ae;
+  let aeFormulaStr;
+  let aeSubStr;
+
+  if (state.connection && state.connection.Ae) {
+      // 1. Direct Ae Override
+      ae = state.connection.Ae;
+      aeFormulaStr = "Ae = Ae (User Defined)";
+      aeSubStr = `Ae = ${ae}`;
+  } else if (state.connection && state.connection.An && state.connection.U) {
+      // 2. Calculated from connection inputs
+      ae = state.connection.An * state.connection.U;
+      aeFormulaStr = "Ae = An × U";
+      aeSubStr = `Ae = ${state.connection.An} × ${state.connection.U}`;
+  } else {
+      // 3. Safe Fallback
+      ae = 0.75 * ag;
+      aeFormulaStr = "Ae = 0.75 × Ag (Assumed)";
+      aeSubStr = `Ae = 0.75 × ${ag}`;
+  }
   const pn_frac_N = fu * ae;
   const pn_frac_kN = pn_frac_N / 1000;
   const factor_frac = isLRFD ? 0.75 : 2.00;
@@ -103,30 +121,30 @@ export function checkTension(state) {
         Fu: { symbol: "\\( F_u \\)", value: fu, unit: "MPa" },
         Ae: { symbol: "\\( A_e \\)", value: ae, unit: "mm²" }
     },
-    substitution: `\\( P_n = ${fu} \\times ${ae} \\)`,
+    substitution: `\\( P_n = ${fu} \\times ${typeof ae === 'number' ? ae.toFixed(2) : ae} \\)`,
     calculation: `Pn = ${pn_frac_N.toLocaleString()} N`,
     result: { value: pn_frac_kN, unit: "kN" },
     resistanceFactor: { symbol: `\\( ${factorSym_frac} \\)`, value: factor_frac },
     designStrength: {
         formula: isLRFD ? "\\( \\phi P_n \\)" : "\\( P_n / \\Omega \\)",
         substitution: isLRFD ? `\\( ${factor_frac} \\times ${pn_frac_kN.toFixed(2)} \\)` : `\\( \\frac{${pn_frac_kN.toFixed(2)}}{${factor_frac}} \\)`,
-        value: Number(ds_frac.toFixed(2)),
+        value: ds_frac,
         unit: "kN"
     },
     demand: { value: pu, unit: "kN" },
     ratio: {
         formula: isLRFD ? "\\( P_u / \\phi P_n \\)" : "\\( P_a / (P_n / \\Omega) \\)",
         substitution: `\\( \\frac{${pu}}{${ds_frac.toFixed(2)}} \\)`,
-        value: Number(ratio_frac.toFixed(3))
+        value: ratio_frac
     },
     status: ratio_frac <= 1.0 ? "PASS" : "FAIL",
     steps: [
         {
             step: 1,
             title: "Effective Net Area",
-            formula: "Ae = 0.75 × Ag (Assumed)",
-            substitution: `Ae = 0.75 × ${ag}`,
-            result: `${ae}`,
+            formula: aeFormulaStr,
+            substitution: aeSubStr,
+            result: typeof ae === 'number' ? ae.toFixed(2) : String(ae),
             unit: "mm²"
         },
         {

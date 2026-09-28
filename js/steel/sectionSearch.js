@@ -2,8 +2,10 @@
 const typeMap = {
   'all': [],
   'w-shape': ['W'],
+  'wt-shape': ['WT'],
   'c-shape': ['C', 'MC'],
   'angle': ['L'],
+  'double-angle': ['DOUBLE_ANGLE'],
   'hss-rect': ['HSS'], // Simplified mapping
   'hss-round': ['HSS']
 };

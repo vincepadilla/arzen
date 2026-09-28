@@ -23,8 +23,8 @@ export function runSteelDesign(state) {
   
   // Conditionally run checks based on member application
   if (type === 'tension' || type === 'brace' || type === 'column' || type === 'beam-column') {
-    if (state.loadPu > 0 || type === 'tension' || type === 'brace') {
-      // Technically Pu > 0 could be tension or compression, but we simplify here.
+    if (state.loadPt > 0 || type === 'tension' || type === 'brace') {
+      // Run tension check if explicitly loaded or if it is a tension/brace member
       results.tension = checkTension(state);
     }
   }
@@ -47,7 +47,7 @@ export function runSteelDesign(state) {
   // --- Calculate Global Governing Limit State ---
   let maxRatio = -1;
   let governingState = null;
-
+  let failureReasons = [];
   let hasFailed = false;
 
   const traverseAndFindMax = (obj) => {
@@ -56,6 +56,11 @@ export function runSteelDesign(state) {
       // Check status even if ratio is null (e.g. seismic compactness)
       if (obj.status === 'FAIL' || obj.status === 'NON-COMPACT') {
         hasFailed = true;
+        if (obj.limitState) {
+          failureReasons.push(`${obj.limitState} failed`);
+        } else if (obj.classification) {
+          failureReasons.push(`Seismic classification: ${obj.classification}`);
+        }
       }
 
       if (obj.ratio !== undefined && obj.limitState !== undefined) {
@@ -83,10 +88,20 @@ export function runSteelDesign(state) {
       ratio: governingState.ratio.value,
       demand: `${governingState.demand.value} ${governingState.demand.unit}`,
       capacity: `${governingState.designStrength.value} ${governingState.designStrength.unit}`,
-      status: hasFailed ? 'FAIL' : 'PASS'
+      status: hasFailed ? 'FAIL' : 'PASS',
+      maxDcr: governingState.ratio.value,
+      governingLimitState: governingState.limitState,
+      pass: !hasFailed && governingState.ratio.value <= 1.0,
+      failureReasons: failureReasons
     };
   } else {
     results.globalSummary = null;
+  }
+  
+  if (results.seismic) {
+     results.seismicSummary = {
+        classification: results.seismic.ductilityClassification
+     };
   }
 
   return results;

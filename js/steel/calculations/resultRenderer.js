@@ -154,25 +154,25 @@ export function renderCalculationResults(results, containerId) {
             <div style="padding:0.75rem; background:rgba(0,0,0,0.2); border-radius:6px;">
               <div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:1px;
                           color:var(--primary,#f5a623); margin-bottom:4px;">
-                ${calcObj.designStrength.formula.includes('φ') || calcObj.designStrength.formula.includes('phi') ? 'LRFD Design Strength' : 'ASD Allowable Strength'}
+                ${(calcObj.designStrength.formula || '').includes('φ') || (calcObj.designStrength.formula || '').includes('phi') ? 'LRFD Design Strength' : 'ASD Allowable Strength'}
               </div>
-              <div style="color:var(--chalk,#eee); margin-bottom:4px;">${calcObj.designStrength.formula}</div>
-              <div style="color:var(--mist,#bbb); font-size:0.9em;">${calcObj.designStrength.substitution}</div>
+              <div style="color:var(--chalk,#eee); margin-bottom:4px;">${calcObj.designStrength.formula || ''}</div>
+              <div style="color:var(--mist,#bbb); font-size:0.9em;">${calcObj.designStrength.substitution || ''}</div>
               <div style="color:var(--amber,#f5a623); font-size:1.1em; font-weight:700; margin-top:6px;">
-                ${calcObj.designStrength.value} ${calcObj.designStrength.unit}
+                ${calcObj.designStrength.value} ${calcObj.designStrength.unit || ''}
               </div>
             </div>
             <div style="padding:0.75rem; background:rgba(0,0,0,0.2); border-radius:6px;">
               <div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:1px;
                           color:var(--primary,#f5a623); margin-bottom:4px;">Demand</div>
               <div style="color:var(--chalk,#eee); font-size:1.05em; font-weight:600; margin-bottom:4px;">
-                ${calcObj.demand.value} ${calcObj.demand.unit}
+                ${calcObj.demand ? calcObj.demand.value : ''} ${calcObj.demand && calcObj.demand.unit ? calcObj.demand.unit : ''}
               </div>
               ${calcObj.ratio !== null ? `
               <div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:1px;
                           color:var(--primary,#f5a623); margin-top:0.75rem; margin-bottom:4px;">D/C Ratio</div>
-              <div style="color:var(--mist,#bbb); font-size:0.88em; margin-bottom:4px;">${calcObj.ratio.formula}</div>
-              <div style="color:var(--mist,#bbb); font-size:0.88em; margin-bottom:4px;">${calcObj.ratio.substitution} = <strong style="color:${statusColor}; font-size:1.1em;">${calcObj.ratio.value}</strong></div>
+              <div style="color:var(--mist,#bbb); font-size:0.88em; margin-bottom:4px;">${calcObj.ratio.formula || ''}</div>
+              <div style="color:var(--mist,#bbb); font-size:0.88em; margin-bottom:4px;">${calcObj.ratio.substitution ? calcObj.ratio.substitution + ' =' : ''} <strong style="color:${statusColor}; font-size:1.1em;">${calcObj.ratio.value}</strong></div>
               ` : ''}
             </div>
           </div>
@@ -199,13 +199,33 @@ export function renderCalculationResults(results, containerId) {
 
   if (results.compression) {
     html += `<h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--chalk); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Compression Checks</h3>`;
-    html += renderLimitState(results.compression.flexuralBuckling);
+    if (results.compression.flexuralBuckling) html += renderLimitState(results.compression.flexuralBuckling);
+    if (results.compression.flexuralTorsionalBuckling) html += renderLimitState(results.compression.flexuralTorsionalBuckling);
   }
 
   if (results.flexure) {
     html += `<h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--chalk); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Flexure Checks</h3>`;
-    html += renderLimitState(results.flexure.yielding);
-    html += renderLimitState(results.flexure.lateralTorsionalBuckling);
+    
+    // Dynamically render all limit states attached directly to flexure (Major Axis)
+    for (const key in results.flexure) {
+        if (key !== 'minor' && key !== 'governingCapacity' && key !== 'governingRatio' && key !== 'passed' && typeof results.flexure[key] === 'object' && results.flexure[key].limitState) {
+            html += renderLimitState(results.flexure[key]);
+        }
+    }
+    
+    // Minor-axis flexure rendering
+    if (results.flexure.minor && results.flexure.minor.limitStates) {
+        html += `<h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--primary);">Minor-Axis Flexure</h4>`;
+        for (const key in results.flexure.minor.limitStates) {
+            html += renderLimitState(results.flexure.minor.limitStates[key]);
+        }
+    } else if (results.flexure.minor && results.flexure.minor.governingLimitState) {
+        html += `<div style="margin-top: 1rem; color:var(--primary); font-weight:bold;">Minor-Axis Flexure</div>`;
+        html += `<div style="margin-bottom: 1rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;">
+            <div>Governing Limit State: ${results.flexure.minor.governingLimitState}</div>
+            <div>Governing Capacity: ${results.flexure.minor.governingCapacity.toFixed(2)} kN-m</div>
+        </div>`;
+    }
   }
 
   if (results.shear) {
@@ -218,16 +238,60 @@ export function renderCalculationResults(results, containerId) {
     html += renderLimitState(results.interaction.combinedForces);
   }
 
-  if (results.seismic && results.seismic.results && results.seismic.results.length > 0) {
-    html += `<h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--chalk); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Seismic Provisions (AISC 341)</h3>`;
+  if (results.seismic && (results.seismic.compactness?.length > 0 || results.seismic.ductility?.length > 0)) {
+    html += `<h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--chalk); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Seismic Provisions & Compactness</h3>`;
+    
+    html += `<div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:1rem;">`;
+
     if (results.seismic.seismicNote) {
-      html += `<div style="margin-bottom: 1rem; padding: 1rem; background: rgba(52, 152, 219, 0.1); border-left: 3px solid #3498db; border-radius: 0 6px 6px 0; color: var(--chalk); font-size: 0.9em;">
-        <i class="fas fa-info-circle" style="color: #3498db; margin-right: 8px;"></i>${results.seismic.seismicNote}
+      html += `<div style="padding: 1rem 1.5rem; background: rgba(52, 152, 219, 0.1); border-bottom: 1px solid rgba(52, 152, 219, 0.2); color: var(--chalk); font-size: 0.95em; display:flex; align-items:center; gap:10px;">
+        <i class="fas fa-info-circle" style="color: #3498db; font-size:1.2em;"></i> <span>${results.seismic.seismicNote}</span>
       </div>`;
     }
-    results.seismic.results.forEach(seismicCheck => {
-      html += renderLimitState(seismicCheck);
-    });
+    
+    html += `<div style="padding: 1.5rem; display:flex; flex-direction:column; gap:2rem;">`;
+    
+    if (results.seismic.compactness?.length > 0) {
+        html += `<div>
+            <h4 style="margin:0 0 1rem 0; color:var(--primary); font-size:1.05em; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.5rem;">Compactness</h4>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">`;
+        results.seismic.compactness.forEach(c => {
+            html += `<div style="background:rgba(0,0,0,0.25); padding:1.25rem; border-radius:8px; border:1px solid rgba(255,255,255,0.05); transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)';" onmouseout="this.style.transform='none'; this.style.boxShadow='none';">
+                <div style="font-weight:700; color:var(--chalk); margin-bottom:0.25rem; font-size:1.1em;">${c.limitState || c.element}</div>
+                <div style="color:var(--mist); font-size:0.9em; margin-bottom:1rem;">Slenderness λ = <span style="color:#fff;">${c.lambda?.toFixed ? c.lambda.toFixed(2) : c.lambda}</span></div>
+                <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:0.5rem 0.75rem; border-radius:4px;">
+                        <span style="color:var(--text-light); font-size:0.85em; text-transform:uppercase; letter-spacing:0.5px;">Axial</span>
+                        <span style="color:${c.axial.classification === 'SLENDER' ? '#e74c3c' : '#2ecc71'}; font-weight:700; font-size:0.9em;">${c.axial.classification}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:0.5rem 0.75rem; border-radius:4px;">
+                        <span style="color:var(--text-light); font-size:0.85em; text-transform:uppercase; letter-spacing:0.5px;">Flexural</span>
+                        <span style="color:${c.flexural.classification === 'SLENDER' ? '#e74c3c' : '#2ecc71'}; font-weight:700; font-size:0.9em;">${c.flexural.classification}</span>
+                    </div>
+                </div>
+            </div>`;
+        });
+        html += `</div></div>`;
+    }
+    
+    if (results.seismic.ductility?.length > 0) {
+        html += `<div>
+            <h4 style="margin:0 0 1rem 0; color:var(--primary); font-size:1.05em; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.5rem;">Ductility</h4>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">`;
+        results.seismic.ductility.forEach(d => {
+            const isHD = d.classification === 'HIGHLY DUCTILE';
+            const isMD = d.classification === 'MODERATELY DUCTILE';
+            const color = isHD ? '#2ecc71' : (isMD ? '#f39c12' : '#e74c3c');
+            html += `<div style="background:rgba(0,0,0,0.25); padding:1.25rem; border-radius:8px; border:1px solid rgba(255,255,255,0.05); text-align:center; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)';" onmouseout="this.style.transform='none'; this.style.boxShadow='none';">
+                <div style="font-weight:700; color:var(--chalk); margin-bottom:0.25rem; font-size:1.1em;">${d.element}</div>
+                <div style="color:var(--mist); font-size:0.85em; margin-bottom:1rem;">λ = ${d.lambda?.toFixed ? d.lambda.toFixed(2) : d.lambda}</div>
+                <div style="display:inline-block; padding:0.4rem 1rem; background:rgba(255,255,255,0.05); border-radius:20px; font-size:0.85em; font-weight:700; color:${color}; letter-spacing:0.5px;">${d.classification}</div>
+            </div>`;
+        });
+        html += `</div></div>`;
+    }
+    
+    html += `</div></div>`;
   }
 
   if (html === '') {
